@@ -1,7 +1,7 @@
 From 86cb10051a05073b8b8701a2add7afbee5e08042 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 14:58:45 -0400
-Subject: [PATCH 2/9] Present the base of mhs at its Hackage versions
+Subject: [PATCH 02/10] Present the base of mhs at its Hackage versions
 
 The base of mhs is versioned like the compiler (base-0.16.9.0) and bundles
 the modules of packages that are separate on Hackage: bytestring, text,

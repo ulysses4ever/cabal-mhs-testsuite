@@ -1,7 +1,7 @@
 From 230ea74281e996821e37db25c2316bd89b6a3862 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 19:46:46 -0400
-Subject: [PATCH 5/9] Keep what is specific to mhs in Distribution.Simple.MHS
+Subject: [PATCH 05/10] Keep what is specific to mhs in Distribution.Simple.MHS
 
 So that supporting MicroHs adds as little as possible to the rest of Cabal:
 

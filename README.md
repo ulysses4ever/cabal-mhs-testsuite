@@ -64,19 +64,18 @@ cabal is no slower than the usual way. Measured once each, with the same mhs, fr
 | Build | Usual way | Time | cabal | Time |
 |---|---|---|---|---|
 | `base` | `mcabal build` in `lib` | 68 s | `cabal build` in `lib` | 69 s |
-| the compiler | the Makefile's `mhs -z -i -imhs -isrc -ilib MicroHs.Main` | 68 s | `cabal build exe:mhs` | 39 s |
+| the compiler | the Makefile's `mhs -z -i -imhs -isrc -ilib MicroHs.Main` | 68 s | `cabal build exe:mhs` | 37 s |
 
-The Makefile's command compiles the sources of `base` again, with `-ilib`, while cabal compiles the compiler against the installed `base`, as mhs run directly would, in 38 s.
+The Makefile's command compiles the sources of `base` again, with `-ilib`, while cabal compiles the compiler against the installed `base`, as mhs run directly would, in 33 s.
 
 What they build:
 
 | Output | Usual way | Size | cabal | Size |
 |---|---|---|---|---|
 | `base-0.16.9.0.pkg` | `mcabal build` | 830,417 bytes | `cabal build` | 830,285 bytes |
-| `mhs` | the Makefile, which passes `-z` | 526,864 bytes | `cabal build exe:mhs` | 1,104,400 bytes |
-| `mhs` | | | `cabal build exe:mhs --mhs-options=-z` | 526,864 bytes |
+| `mhs` | the Makefile | 526,864 bytes | `cabal build exe:mhs` | 526,864 bytes |
 
-mhs always compresses package files, so the two `base` packages are the same size but for 132 bytes, and `mhs -v -v -L` prints the same modules, exports and definitions for both. For programs, compression is the option `-z`, which the Makefile passes for `mhs` and mcabal passes for every executable, and which cabal passes only when asked: with `--mhs-options=-z`, or with `mhs-options: -z` under `package MicroHs` in `cabal.project`. Given it, cabal builds an `mhs` of exactly the Makefile's size, in 34 s. Their machine code and data are identical, and their combinator code differs only in how 52 source locations of `base` are spelled, such as `lib/Text/Printf.hs` against `./Text/Printf.hs`, since the Makefile compiles the sources of `base` again.
+mhs always compresses package files, so the two `base` packages are the same size but for 132 bytes, and `mhs -v -v -L` prints the same modules, exports and definitions for both. For programs, compression is the option `-z`, which the Makefile passes for `mhs` and mcabal passes for every executable, and which cabal passes too since patch 10; before it, cabal built an `mhs` of 1,104,400 bytes. The `mhs` that cabal builds is exactly the size of the Makefile's: their machine code and data are identical, and their combinator code differs only in how 52 source locations of `base` are spelled, such as `lib/Text/Printf.hs` against `./Text/Printf.hs`, since the Makefile compiles the sources of `base` again.
 
 The `base` that cabal builds has the same modules as the one that MicroHs ships, as `mhs -L` describes them. An installation of mhs whose `base` and compiler are those that cabal built passes the tests of `cabal-testsuite/PackageTests/MHS`, and the replay with it builds and runs all 91 packages ([local run](results/2026-10-13-local-self-built/summary.md)). CI builds both and compiles a program with them ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38427367498)). `cabal install exe:mhs` does not give a working mhs, which looks for its packages and runtime only beside its binary (item 15 of the inventory).
 

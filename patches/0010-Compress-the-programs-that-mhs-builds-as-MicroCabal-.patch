@@ -1,0 +1,37 @@
+From ca91bdbf6aeeb7c29d8eb0775087ca253ec02c2c Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Tue, 13 Oct 2026 14:06:06 -0400
+Subject: [PATCH 10/10] Compress the programs that mhs builds, as MicroCabal
+ does
+
+mcabal passes -z to mhs for every executable it builds, and MicroHs's
+Makefile passes it for mhs itself, which makes mhs compress the combinator
+code of the program. Cabal now passes it too, so that, built with cabal,
+mhs is the size it is built with the Makefile, 526,864 bytes rather than
+1,104,400, and builds no slower. Libraries are not affected, as mhs always
+compresses package files.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/MHS.hs | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index fc7145f58..99c550949 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -592,7 +592,9 @@ buildExe verbosity pkg_descr lbi exe clbi = do
+   srcMainPath <- findFileCwd verbosity (mbWorkDirLBI lbi) (sourceDirs bi) (modulePath exe)
+   createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
+   runMhs verbosity pkg_descr lbi bi clbi $
+-    map u (cSources bi)
++    -- Compress the combinator code of the program, as MicroCabal does.
++    ["-z"]
++      ++ map u (cSources bi)
+       ++ concat [["-optc", opt] | opt <- ccOptions bi]
+       ++ ["-o", u exeFile, u srcMainPath]
+ 
+-- 
+2.54.0
+

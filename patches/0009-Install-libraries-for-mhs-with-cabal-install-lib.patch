@@ -1,7 +1,7 @@
 From 56ef3812940b36a306c96b42d3a9fb6de1d5f207 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Tue, 13 Oct 2026 09:16:15 -0400
-Subject: [PATCH 9/9] Install libraries for mhs with cabal install --lib
+Subject: [PATCH 09/10] Install libraries for mhs with cabal install --lib
 
 mhs has no package environments: it finds packages in the package
 directories of its search path, into which 'mhs -Q' installs them. With
