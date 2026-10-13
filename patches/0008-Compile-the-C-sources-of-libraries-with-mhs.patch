@@ -1,7 +1,7 @@
 From db24dc23037c629684f3195ab984dec939834f3e Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Tue, 13 Oct 2026 07:16:27 -0400
-Subject: [PATCH 8/8] Compile the C sources of libraries with mhs
+Subject: [PATCH 8/9] Compile the C sources of libraries with mhs
 
 mhs compiles no C when it builds a library. It compiles the C sources of a
 library when it links a program that loads the package file of the library,

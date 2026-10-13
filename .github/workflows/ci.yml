@@ -116,6 +116,7 @@ jobs:
           cabal-testsuite/PackageTests/MHS/Build/cabal.test.hs
           cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs
           cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs
+          cabal-testsuite/PackageTests/MHS/InstallLib/cabal.test.hs
 
       - name: Replay MicroHs's package list
         if: ${{ !cancelled() }}
