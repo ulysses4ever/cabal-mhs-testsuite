@@ -59,7 +59,7 @@ printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\n' > cabal.project
 cabal build exe:mhs            # the compiler, in about a minute
 ```
 
-The `base` that cabal builds has the same modules as the one that MicroHs ships, as `mhs -L` describes them. An installation of mhs whose `base` and compiler are those that cabal built passes the tests of `cabal-testsuite/PackageTests/MHS`, and the replay with it builds and runs all 91 packages ([local run](results/2026-10-13-local-self-built/summary.md)). CI builds both and compiles a program with them. `cabal install exe:mhs` does not give a working mhs, which looks for its packages and runtime only beside its binary (item 15 of the inventory).
+The `base` that cabal builds has the same modules as the one that MicroHs ships, as `mhs -L` describes them. An installation of mhs whose `base` and compiler are those that cabal built passes the tests of `cabal-testsuite/PackageTests/MHS`, and the replay with it builds and runs all 91 packages ([local run](results/2026-10-13-local-self-built/summary.md)). CI builds both and compiles a program with them ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38427367498)). `cabal install exe:mhs` does not give a working mhs, which looks for its packages and runtime only beside its binary (item 15 of the inventory).
 
 ## Problems outside cabal
 
