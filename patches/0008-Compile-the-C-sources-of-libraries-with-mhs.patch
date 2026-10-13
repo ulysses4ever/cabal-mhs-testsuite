@@ -1,0 +1,433 @@
+From db24dc23037c629684f3195ab984dec939834f3e Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Tue, 13 Oct 2026 07:16:27 -0400
+Subject: [PATCH 8/8] Compile the C sources of libraries with mhs
+
+mhs compiles no C when it builds a library. It compiles the C sources of a
+library when it links a program that loads the package file of the library,
+from <name>-<version>/cbits beside the package file, which is where
+MicroCabal installs the c-sources of a library. Cabal ignored the C sources
+of libraries with a warning, and gave mhs no include directories of the
+dependencies of a component, so a program calling into the C code of a
+library failed to compile, as with time, which takes the time zone from C:
+
+  fatal error: HsTime.h: No such file or directory
+
+buildLib now copies the c-sources of a library there, beside the package
+file in its build directory, and installLib copies them along with the
+package file. The headers are found as with GHC: the include-dirs that the
+registrations of the dependencies of a component list, which is where Cabal
+installs their install-includes for every compiler, are given to mhs with
+-I, which it passes on to the C compiler. See Note [MicroHs C files of
+libraries]. The cc-options of an executable are now passed to mhs, with
+-optc, for its own C sources.
+
+The test MHS/CSources builds a library with C sources and a header from a
+repository, into the store, and another one in place, and runs an
+executable calling both.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/MHS.hs          | 80 ++++++++++++++++---
+ .../PackageTests/MHS/CSources/app/Main.hs     | 14 ++++
+ .../PackageTests/MHS/CSources/app/offset.c    |  3 +
+ .../PackageTests/MHS/CSources/app/offset.h    |  1 +
+ .../PackageTests/MHS/CSources/cabal.project   |  3 +
+ .../PackageTests/MHS/CSources/cabal.test.hs   | 15 ++++
+ .../PackageTests/MHS/CSources/cbits/twice.c   |  3 +
+ .../PackageTests/MHS/CSources/include/twice.h |  1 +
+ .../MHS/CSources/mhs-csources.cabal           | 24 ++++++
+ .../CSources/repo/mhs-cdep-1.0/cbits/add.c    |  3 +
+ .../CSources/repo/mhs-cdep-1.0/include/add.h  |  3 +
+ .../CSources/repo/mhs-cdep-1.0/mhs-cdep.cabal | 15 ++++
+ .../MHS/CSources/repo/mhs-cdep-1.0/src/Add.hs |  7 ++
+ .../PackageTests/MHS/CSources/src/Twice.hs    |  5 ++
+ changelog.d/pr-11392.md                       |  9 ++-
+ 15 files changed, 171 insertions(+), 15 deletions(-)
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/app/Main.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/app/offset.c
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/app/offset.h
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/cabal.project
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/cbits/twice.c
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/include/twice.h
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/mhs-csources.cabal
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/cbits/add.c
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/include/add.h
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/mhs-cdep.cabal
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/src/Add.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/CSources/src/Twice.hs
+
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index 7682a6267..2cdf60bd7 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -71,7 +71,7 @@ import qualified Distribution.Types.BuildInfo.Lens as L
+ import qualified Data.ByteString as BS
+ import Data.List (stripPrefix)
+ import qualified Data.Map as Map (fromList)
+-import System.Directory (doesDirectoryExist, getDirectoryContents, getHomeDirectory)
++import System.Directory (doesDirectoryExist, getDirectoryContents, getHomeDirectory, removeDirectoryRecursive)
+ import System.FilePath (takeDirectory, takeExtension, takeFileName)
+ 
+ {- Note [MicroHs package databases]
+@@ -135,6 +135,30 @@ far as cabal-install gives it the packages to use instead.
+     defined under the name of the original too, see 'cabalMacrosOptions'.
+ -}
+ 
++{- Note [MicroHs C files of libraries]
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++mhs compiles no C when it builds a library: the C sources of a library are
++compiled when a program that loads its package file is linked, along with the
++C that mhs generates for the program. mhs takes them from beside the package
++file <dir>/<name>-<version>.pkg, from <dir>/<name>-<version>/cbits/*.c. That
++is where MicroCabal installs the c-sources of a library, and so does Cabal,
++see 'layOutCSources': into the build directory, beside the package file that
++'buildLib' writes, from where 'installLib' copies them with it.
++
++The headers that the C sources and the foreign imports of a program include
++are found as with GHC: the include-dirs of the libraries a component depends
++on, as their registrations list them, are given to mhs with -I, which it
++passes on to the C compiler. Those of a library built in place are its own
++include-dirs; once it is installed, the directory where its install-includes
++are installed for every compiler. (MicroCabal installs the install-includes
++into <dir>/<name>-<version>/include, which mhs adds to the include path
++itself.) The extra-libraries and ld-options of a library are given to mhs as
++-optl when it builds the library, and the package file keeps them.
++
++As the C sources are compiled with the options of the program, the cc-options
++of the library do not apply to them.
++-}
++
+ -- -----------------------------------------------------------------------------
+ -- Configuring
+ 
+@@ -512,11 +536,30 @@ buildLib verbosity pkg_descr lbi lib clbi = do
+         | null (exposedModules lib) = otherModules bi
+         | otherwise = exposedModules lib
+   createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
+-  unless (null (cSources bi)) $
+-    warn verbosity "MicroHs cannot include C sources in a library; ignoring them."
++  unless (null (cxxSources bi ++ asmSources bi ++ cmmSources bi)) $
++    warn verbosity "MicroHs compiles only the C sources of a library; ignoring its C++, assembler and Cmm sources."
+   runMhs verbosity pkg_descr lbi bi clbi $
+     ["-P" ++ pkgId, "-o", interpretSymbolicPathCWD pkgFile]
+       ++ map prettyShow modules
++  layOutCSources verbosity lbi bi (interpretSymbolicPathLBI lbi targetDir </> pkgId </> "cbits")
++
++-- | Copy the C sources of a library into the directory beside its package file
++-- where mhs looks for them, which is emptied first.
++-- See Note [MicroHs C files of libraries].
++layOutCSources :: Verbosity -> LocalBuildInfo -> BuildInfo -> FilePath -> IO ()
++layOutCSources verbosity lbi bi dir = do
++  exists <- doesDirectoryExist dir
++  when exists $ removeDirectoryRecursive dir
++  let sources = ordNub (map (interpretSymbolicPathLBI lbi) (cSources bi))
++      clashing = [source | source <- sources, length (filter (sameName source) sources) > 1]
++      sameName a b = takeFileName a == takeFileName b
++  unless (null clashing) $
++    dieWithException verbosity $
++      MhsCSourceNameClash clashing
++  unless (null sources) $
++    createDirectoryIfMissingVerbose verbosity True dir
++  for_ sources $ \source ->
++    installOrdinaryFile verbosity source (dir </> takeFileName source)
+ 
+ buildExe
+   :: Verbosity
+@@ -535,6 +578,7 @@ buildExe verbosity pkg_descr lbi exe clbi = do
+   createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
+   runMhs verbosity pkg_descr lbi bi clbi $
+     map u (cSources bi)
++      ++ concat [["-optc", opt] | opt <- ccOptions bi]
+       ++ ["-o", u exeFile, u srcMainPath]
+ 
+ -- | Run mhs with the arguments common to libraries and executables, followed
+@@ -552,7 +596,8 @@ runMhs verbosity pkg_descr lbi bi clbi args = do
+       mbWorkDir = mbWorkDirLBI lbi
+       progdb = withPrograms lbi
+       u = interpretSymbolicPathCWD -- See Note [Symbolic paths] in Distribution.Utils.Path
+-  pkgFiles <- dependencyPackageFiles verbosity lbi clbi
++  closure <- dependencyClosure verbosity lbi clbi
++  pkgFiles <- catMaybes <$> traverse (packageFile verbosity) closure
+   let commonArgs =
+         verbosityFlags verbosity
+           -- The module search path: the source directories of the component
+@@ -575,6 +620,9 @@ runMhs verbosity pkg_descr lbi bi clbi args = do
+           ++ ["-I" ++ u (autogenComponentModulesDir lbi clbi)]
+           ++ [opt | opt <- cppOptions bi, any (`isPrefixOf` opt) ["-D", "-I"]]
+           ++ ["-I" ++ u dir | dir <- includeDirs bi]
++          -- The headers of the dependencies, for the C that mhs compiles when
++          -- it links a program. See Note [MicroHs C files of libraries].
++          ++ ["-I" ++ dir | dir <- ordNub (concatMap IPI.includeDirs closure)]
+           ++ hcOptions MHS bi
+           ++ concat [["-optl", opt] | opt <- linkerOptions]
+       linkerOptions =
+@@ -583,16 +631,16 @@ runMhs verbosity pkg_descr lbi bi clbi args = do
+           ++ ldOptions bi
+   runDbProgramCwd verbosity mbWorkDir mhsProgram progdb (commonArgs ++ args)
+ 
+--- | The package files of the dependencies of a component, closed under the
+--- dependencies of the dependencies.
+-dependencyPackageFiles :: Verbosity -> LocalBuildInfo -> ComponentLocalBuildInfo -> IO [FilePath]
+-dependencyPackageFiles verbosity lbi clbi = do
++-- | The dependencies of a component, closed under the dependencies of the
++-- dependencies.
++dependencyClosure :: Verbosity -> LocalBuildInfo -> ComponentLocalBuildInfo -> IO [InstalledPackageInfo]
++dependencyClosure verbosity lbi clbi = do
+   -- Read the package databases again rather than using 'installedPkgs', which
+   -- predates the libraries registered in place since the package was configured.
+   index <-
+     getInstalledPackages verbosity (compiler lbi) (mbWorkDirLBI lbi) (withPackageDB lbi) (withPrograms lbi)
+   let deps = map fst (componentPackageDeps clbi)
+-  closure <- case PackageIndex.dependencyClosure index deps of
++  case PackageIndex.dependencyClosure index deps of
+     Left closure -> return (PackageIndex.allPackages closure)
+     Right broken ->
+       dieWithException verbosity $
+@@ -600,7 +648,6 @@ dependencyPackageFiles verbosity lbi clbi = do
+           ordNub $
+             [dep | dep <- deps, isNothing (PackageIndex.lookupUnitId index dep)]
+               ++ concatMap snd broken
+-  catMaybes <$> traverse (packageFile verbosity) closure
+ 
+ -- | The macros of @cabal_macros.h@ as @-D@ options of cpphs, to which mhs passes
+ -- on only the @-D@ and @-I@ options it is given, so that it cannot be told to
+@@ -670,9 +717,13 @@ installLib
+   -> ComponentLocalBuildInfo
+   -> IO ()
+ installLib verbosity _lbi targetDir _dynlibTargetDir builtDir pkg lib _clbi = do
+-  let pkgFile = mhsPackageId (packageId pkg) (libName lib) <.> "pkg"
++  let pkgId = mhsPackageId (packageId pkg) (libName lib)
+   createDirectoryIfMissingVerbose verbosity True targetDir
+-  installOrdinaryFile verbosity (builtDir </> pkgFile) (targetDir </> pkgFile)
++  installOrdinaryFile verbosity (builtDir </> pkgId <.> "pkg") (targetDir </> pkgId <.> "pkg")
++  -- The C files of the library, see Note [MicroHs C files of libraries].
++  hasCFiles <- doesDirectoryExist (builtDir </> pkgId)
++  when hasCFiles $
++    installDirectoryContents verbosity (builtDir </> pkgId) (targetDir </> pkgId)
+ 
+ installExe
+   :: Verbosity
+@@ -737,6 +788,7 @@ data MhsException
+   | MhsPackageFileNotFound UnitId [FilePath]
+   | MhsRegistrationFileParseError FilePath [String]
+   | MhsMissingDependencies [UnitId]
++  | MhsCSourceNameClash [FilePath]
+   deriving (Show)
+ 
+ instance Exception (VerboseException MhsException) where
+@@ -750,6 +802,7 @@ mhsExceptionCode err = case err of
+   MhsPackageFileNotFound{} -> 3202
+   MhsRegistrationFileParseError{} -> 3203
+   MhsMissingDependencies{} -> 3204
++  MhsCSourceNameClash{} -> 3205
+ 
+ mhsExceptionMessage :: MhsException -> String
+ mhsExceptionMessage err = case err of
+@@ -763,3 +816,6 @@ mhsExceptionMessage err = case err of
+     "Failed to find the installed units "
+       ++ intercalate ", " (map prettyShow unitIds)
+       ++ " in the package database stack."
++  MhsCSourceNameClash files ->
++    "MicroHs compiles the C sources of a library from one directory, so they need distinct file names: "
++      ++ intercalate ", " files
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/app/Main.hs b/cabal-testsuite/PackageTests/MHS/CSources/app/Main.hs
+new file mode 100644
+index 000000000..ca1525ef2
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/app/Main.hs
+@@ -0,0 +1,14 @@
++module Main (main) where
++
++import Add (add)
++import Foreign.C.Types (CInt (..))
++import Twice (twice)
++
++foreign import ccall "offset.h csources_offset" offset :: IO CInt
++
++main :: IO ()
++main = do
++  putStrLn ("add 2 3 = " ++ show (add 2 3))
++  putStrLn ("twice 21 = " ++ show (twice 21))
++  o <- offset
++  putStrLn ("offset = " ++ show o)
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/app/offset.c b/cabal-testsuite/PackageTests/MHS/CSources/app/offset.c
+new file mode 100644
+index 000000000..f1fe7f90c
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/app/offset.c
+@@ -0,0 +1,3 @@
++#include "offset.h"
++
++int csources_offset(void) { return OFFSET; }
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/app/offset.h b/cabal-testsuite/PackageTests/MHS/CSources/app/offset.h
+new file mode 100644
+index 000000000..0614769c8
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/app/offset.h
+@@ -0,0 +1 @@
++int csources_offset(void);
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/cabal.project b/cabal-testsuite/PackageTests/MHS/CSources/cabal.project
+new file mode 100644
+index 000000000..3dccaec79
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/cabal.project
+@@ -0,0 +1,3 @@
++packages: .
++compiler: mhs
++with-compiler: mhs
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs b/cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs
+new file mode 100644
+index 000000000..6d8239c18
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs
+@@ -0,0 +1,15 @@
++import Test.Cabal.Prelude
++
++-- The C sources of libraries with MicroHs, if it is installed: mhs compiles
++-- them when it links a program, from beside the package file of the library,
++-- with the install-includes of the library on the include path. mhs-cdep
++-- comes from a repository and is installed in the store; mhs-csources is
++-- built in place.
++main = cabalTest $ do
++    skipUnless "no mhs" =<< isAvailableProgram mhsProgram
++    recordMode DoNotRecord $ withRepo "repo" $ do
++        cabal "v2-build" ["all"]
++        out <- cabal' "v2-run" ["mhs-csources"]
++        assertOutputContains "add 2 3 = 6" out
++        assertOutputContains "twice 21 = 42" out
++        assertOutputContains "offset = 7" out
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/cbits/twice.c b/cabal-testsuite/PackageTests/MHS/CSources/cbits/twice.c
+new file mode 100644
+index 000000000..559bc4b97
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/cbits/twice.c
+@@ -0,0 +1,3 @@
++#include "twice.h"
++
++int csources_twice(int x) { return 2 * x; }
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/include/twice.h b/cabal-testsuite/PackageTests/MHS/CSources/include/twice.h
+new file mode 100644
+index 000000000..34a44a45d
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/include/twice.h
+@@ -0,0 +1 @@
++int csources_twice(int x);
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/mhs-csources.cabal b/cabal-testsuite/PackageTests/MHS/CSources/mhs-csources.cabal
+new file mode 100644
+index 000000000..8c6315ddd
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/mhs-csources.cabal
+@@ -0,0 +1,24 @@
++cabal-version:   3.0
++name:            mhs-csources
++version:         1.0
++build-type:      Simple
++license:         BSD-3-Clause
++synopsis:        C sources with MicroHs
++
++library
++    exposed-modules:  Twice
++    c-sources:        cbits/twice.c
++    include-dirs:     include
++    install-includes: twice.h
++    build-depends:    base
++    hs-source-dirs:   src
++    default-language: Haskell2010
++
++executable mhs-csources
++    main-is:          Main.hs
++    c-sources:        app/offset.c
++    include-dirs:     app
++    cc-options:       -DOFFSET=7
++    build-depends:    base, mhs-cdep, mhs-csources
++    hs-source-dirs:   app
++    default-language: Haskell2010
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/cbits/add.c b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/cbits/add.c
+new file mode 100644
+index 000000000..ac0daa64b
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/cbits/add.c
+@@ -0,0 +1,3 @@
++#include "add.h"
++
++int cdep_add(int x, int y) { return x + y + CDEP_BIAS; }
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/include/add.h b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/include/add.h
+new file mode 100644
+index 000000000..1b2a25db6
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/include/add.h
+@@ -0,0 +1,3 @@
++#define CDEP_BIAS 1
++
++int cdep_add(int x, int y);
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/mhs-cdep.cabal b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/mhs-cdep.cabal
+new file mode 100644
+index 000000000..3d6087ef7
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/mhs-cdep.cabal
+@@ -0,0 +1,15 @@
++cabal-version:    3.0
++name:             mhs-cdep
++version:          1.0
++build-type:       Simple
++license:          BSD-3-Clause
++synopsis:         A library with C sources and a header
++
++library
++    exposed-modules:  Add
++    c-sources:        cbits/add.c
++    include-dirs:     include
++    install-includes: add.h
++    build-depends:    base
++    hs-source-dirs:   src
++    default-language: Haskell2010
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/src/Add.hs b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/src/Add.hs
+new file mode 100644
+index 000000000..e0c433c2e
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/repo/mhs-cdep-1.0/src/Add.hs
+@@ -0,0 +1,7 @@
++{-# LANGUAGE CApiFFI #-}
++
++module Add (add) where
++
++import Foreign.C.Types (CInt (..))
++
++foreign import capi "add.h cdep_add" add :: CInt -> CInt -> CInt
+diff --git a/cabal-testsuite/PackageTests/MHS/CSources/src/Twice.hs b/cabal-testsuite/PackageTests/MHS/CSources/src/Twice.hs
+new file mode 100644
+index 000000000..932b7c85f
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/CSources/src/Twice.hs
+@@ -0,0 +1,5 @@
++module Twice (twice) where
++
++import Foreign.C.Types (CInt (..))
++
++foreign import ccall "twice.h csources_twice" twice :: CInt -> CInt
+diff --git a/changelog.d/pr-11392.md b/changelog.d/pr-11392.md
+index a0b1578fa..26ba1b064 100644
+--- a/changelog.d/pr-11392.md
++++ b/changelog.d/pr-11392.md
+@@ -13,9 +13,12 @@ Haskell compiler. Select it with `compiler: mhs` and `with-compiler: mhs` in
+ The packages that come with mhs, such as `base`, are found through `mhs -L`.
+ The libraries that Cabal builds are compiled into mhs package files, which the
+ components depending on them preload, so that each component sees exactly the
+-packages it depends on. Only what simple packages need is implemented; there
+-is no support for Backpack, foreign libraries, profiling, shared libraries or
+-C sources in libraries.
++packages it depends on. mhs compiles the C sources of a library when it links
++a program that uses the library, so Cabal puts them beside its package file,
++where MicroCabal installs them too, and gives mhs the include directories of
++the libraries a component depends on, as GHC gets them. Only what simple
++packages need is implemented; there is no support for Backpack, foreign
++libraries, profiling or shared libraries.
+ 
+ The `base` of mhs is versioned like mhs itself and bundles the modules of
+ `bytestring`, `text`, `deepseq`, `stm`, `directory`, `process`, `hashable` and
+-- 
+2.54.0
+

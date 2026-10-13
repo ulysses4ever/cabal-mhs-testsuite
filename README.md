@@ -6,7 +6,9 @@ This tests the support for [MicroHs](https://github.com/augustss/MicroHs) (`mhs`
 
 ## What it does
 
-MicroHs's [`Makefile.packages`](https://github.com/augustss/MicroHs/blob/master/Makefile.packages) lists the Hackage packages that its `hackage-ci` workflow installs, on every push, with `mcabal`, the package manager of MicroHs. `replay.py` builds the same packages with cabal driving mhs, one at a time and in the same order: for each package, it builds a tiny executable that depends on it, into a store shared by all the steps. A package counts as built when that succeeds: as with mcabal, its library compiles, and nothing is run.
+MicroHs's [`Makefile.packages`](https://github.com/augustss/MicroHs/blob/master/Makefile.packages) lists the Hackage packages that its `hackage-ci` workflow installs, on every push, with `mcabal`, the package manager of MicroHs. `replay.py` builds the same packages with cabal driving mhs, one at a time and in the same order: for each package, it builds a tiny executable that depends on it, into a store shared by all the steps, and runs it. A package counts when both succeed. MicroHs's CI only installs the packages.
+
+mhs compiles the C sources of the libraries a program uses when it links the program, so even an executable that does nothing compiles the C sources of the package and of its dependencies. For the packages whose C code a program can call (`time`, `terminfo`, `binary`), for those that seed random numbers from the clock (`splitmix`, `random`), and for the test frameworks `QuickCheck` and `hspec`, which use much of the list, the executable calls into the package (`SMOKE` in `replay.py`).
 
 Where mcabal behaves differently from cabal, the replay does what mcabal does:
 
@@ -25,7 +27,7 @@ CI also runs the tests of the PR in `cabal-testsuite/PackageTests/MHS`.
 
 ## Results
 
-The summary page of every CI run lists which packages build, with the inputs of the run, and why each of the others fails; the logs of all the steps are attached to it.
+The summary page of every CI run lists which packages build and run, with the inputs of the run, why each of the others fails, and what the executables that call into their package print; the logs of all the steps are attached to it.
 
 While the patches were written, the replay of the 91 packages measured each step (on MicroHs's list at its master of 2026-10-10, before the bounds of `project.extra`):
 
@@ -38,6 +40,14 @@ While the patches were written, the replay of the 91 packages measured each step
 | patch 6, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
 | the forks of `array` and `random` installed with mcabal, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
 | patch 7: packages rewritten for mhs before solving, so that `ghc-compat` and the forks come from Hackage and mhs needs nothing installed ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38363564839), [local run](results/2026-10-13-local-base-only/summary.md)) | 91 |
+| patch 8: the C sources of libraries; from here on, every executable is also run, and seven of them call into their package ([local run](results/2026-10-13-local-csources/summary.md), with GCC 15) | 91 build and run |
+
+## What running the programs shows about mhs
+
+Running the programs found two problems outside cabal. mcabal has them too, since mhs generates the same C whichever tool builds a package.
+
+* **mhs declares no imported C function.** A function imported without a header, as in `foreign import ccall "f"`, is undeclared where the C that mhs generates calls it. GCC 14 and later reject the call, and older compilers assume that it returns an `int`, which truncates a pointer. Taking the address of such a function, as in `foreign import ccall "&f"`, fails with any compiler. `terminfo` imports most of its C functions that way, so a program calling `setupTerm` compiles only if it also uses an import naming `term.h`, which declares them all; its smoke program uses `cursorAddress` for that. `cpu` imports `cpuid` that way, so the replay does not call it.
+* **`time` gets the sign of the time zone wrong under mhs.** With mhs, `HsTime.h` skips the results of the configure script, and `get_current_timezone_seconds` falls back to the C variable `timezone`, which counts seconds west of UTC, without negating it. It also names the zone after standard time. On a machine on US Eastern time in October, `getZonedTime` is eight hours ahead and calls the zone EST. CI runs in UTC, where this does not show.
 
 ## Running it locally
 
