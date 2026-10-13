@@ -1,0 +1,15 @@
+-- Added to the project of every step of the replay.
+--
+-- mcabal, which Makefile.packages is written for, ignores version bounds.
+-- These lift the few bounds that stand between a package of the list and the
+-- versions of its dependencies that support mhs.
+
+-- The indexed-traversable fork of MicroHs caps containers below 0.8, but
+-- containers-0.7 depends on template-haskell, and 0.8 is the first version
+-- that mhs can build. QuickCheck from git is already 2.19.0.0, which
+-- hspec-core and hspec cap below.
+allow-newer: indexed-traversable:containers, hspec-core:QuickCheck, hspec:QuickCheck
+
+-- xhtml-3000.3 and later import Data.Text.Lazy.Encoding, which the base of
+-- mhs does not have.
+constraints: xhtml < 3000.3

@@ -1,0 +1,378 @@
+From e33ea4c5b8e04501f098e161e477d0c53f584eaf Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Mon, 12 Oct 2026 18:54:12 -0400
+Subject: [PATCH 4/7] Pass the version macros of cabal_macros.h to mhs
+
+GHC includes cabal_macros.h with -optP-include. mhs passes on to cpphs only
+the -D and -I options it is given, so give it the macros of the header one
+by one, as MicroCabal does: generateCabalMacrosOptions renders the same data
+as generateCabalMacrosHeader as -D options, VERSION_<pkg> and
+MIN_VERSION_<pkg>(major1,major2,minor) for the package and its dependencies,
+the TOOL_ variants for the configured programs, and the CURRENT_ constants,
+the first definition of a macro winning as in the header. The autogen
+directory of the component is on the include path of cpphs too, so a module
+that includes cabal_macros.h itself finds it.
+
+Many packages choose code on these macros, transformers for instance its
+Semigroup instances, and without them took the branch for an ancient base.
+
+The test of mhs moves to PackageTests/MHS/Build, and PackageTests/MHS/Macros
+checks the macros; it is skipped unless mhs and its cpphs are installed.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/Build/Macros.hs | 81 ++++++++++++++-----
+ Cabal/src/Distribution/Simple/MHS.hs          | 16 ++--
+ .../PackageTests/MHS/{ => Build}/app/Main.hs  |  0
+ .../MHS/{ => Build}/cabal.project             |  0
+ .../MHS/{ => Build}/cabal.test.hs             |  0
+ .../MHS/{ => Build}/mhs-test.cabal            |  0
+ .../MHS/{ => Build}/src/Greeting.hs           |  0
+ .../MHS/{ => Build}/src/Greeting/Internal.hs  |  0
+ .../PackageTests/MHS/Macros/app/Main.hs       | 15 ++++
+ .../PackageTests/MHS/Macros/cabal.project     |  3 +
+ .../PackageTests/MHS/Macros/cabal.test.hs     | 15 ++++
+ .../PackageTests/MHS/Macros/mhs-macros.cabal  | 18 +++++
+ .../PackageTests/MHS/Macros/src/Versions.hs   | 29 +++++++
+ changelog.d/pr-11392.md                       |  3 +-
+ 14 files changed, 156 insertions(+), 24 deletions(-)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/app/Main.hs (100%)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/cabal.project (100%)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/cabal.test.hs (100%)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/mhs-test.cabal (100%)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/src/Greeting.hs (100%)
+ rename cabal-testsuite/PackageTests/MHS/{ => Build}/src/Greeting/Internal.hs (100%)
+ create mode 100644 cabal-testsuite/PackageTests/MHS/Macros/app/Main.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/Macros/cabal.project
+ create mode 100644 cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/Macros/mhs-macros.cabal
+ create mode 100644 cabal-testsuite/PackageTests/MHS/Macros/src/Versions.hs
+
+diff --git a/Cabal/src/Distribution/Simple/Build/Macros.hs b/Cabal/src/Distribution/Simple/Build/Macros.hs
+index f3c51d71c..9fbf11504 100644
+--- a/Cabal/src/Distribution/Simple/Build/Macros.hs
++++ b/Cabal/src/Distribution/Simple/Build/Macros.hs
+@@ -22,6 +22,7 @@
+ -- suspicious that this stuff works with munged package identifiers
+ module Distribution.Simple.Build.Macros
+   ( generateCabalMacrosHeader
++  , generateCabalMacrosOptions
+   , generatePackageVersionMacros
+   ) where
+ 
+@@ -35,6 +36,7 @@ import Distribution.Simple.Program.Db
+ import Distribution.Simple.Program.Types
+ import Distribution.Types.MungedPackageId
+ import Distribution.Types.MungedPackageName
++import Distribution.Utils.Generic (ordNubBy)
+ import Distribution.Version
+ 
+ import qualified Distribution.Simple.Build.Macros.Z as Z
+@@ -42,30 +44,73 @@ import qualified Distribution.Simple.Build.Macros.Z as Z
+ -- | The contents of the @cabal_macros.h@ for the given configured package.
+ generateCabalMacrosHeader :: PackageDescription -> LocalBuildInfo -> ComponentLocalBuildInfo -> String
+ generateCabalMacrosHeader pkg_descr lbi clbi =
+-  Z.render
+-    Z.Z
+-      { Z.zPackages = map mkZPackage $ package pkg_descr : map getPid (componentPackageDeps clbi)
+-      , Z.zTools =
+-          [ Z.ZTool
++  Z.render (cabalMacros pkg_descr lbi clbi)
++
++-- | The macros of the @cabal_macros.h@ for the given configured package, as
++-- @-D@ options of the C preprocessor, for a compiler that cannot have its
++-- preprocessor include a file: MicroHs passes on to cpphs only the @-D@ and
++-- @-I@ options it is given. As in the header, the first definition of a macro
++-- wins.
++generateCabalMacrosOptions :: PackageDescription -> LocalBuildInfo -> ComponentLocalBuildInfo -> [String]
++generateCabalMacrosOptions pkg_descr lbi clbi =
++  [ "-D" ++ lhs ++ "=" ++ rhs
++  | (_, lhs, rhs) <- ordNubBy (\(name, _, _) -> name) macros
++  ]
++  where
++    z = cabalMacros pkg_descr lbi clbi
++    macros =
++      concat
++        [ versionMacros "" (Z.zManglePkgName z (Z.zpkgName p)) (Z.zpkgVersion p) (Z.zpkgX p, Z.zpkgY p, Z.zpkgZ p)
++        | p <- Z.zPackages z
++        ]
++        ++ concat
++          [ versionMacros "TOOL_" (Z.zMangleStr z (Z.ztoolName t)) (Z.ztoolVersion t) (Z.ztoolX t, Z.ztoolY t, Z.ztoolZ t)
++          | t <- Z.zTools z
++          ]
++        ++ [constant "CURRENT_PACKAGE_KEY" (Z.zPackageKey z) | Z.zNotNull z (Z.zPackageKey z)]
++        ++ [constant "CURRENT_COMPONENT_ID" (Z.zComponentId z) | Z.zNotNull z (Z.zComponentId z)]
++        ++ [constant "CURRENT_PACKAGE_VERSION" (prettyShow (Z.zPackageVersion z))]
++    constant name value = (name, name, "\"" ++ value ++ "\"")
++    versionMacros kind name version (x, y, minor) =
++      [ constant (kind ++ "VERSION_" ++ name) (prettyShow version)
++      , let macro = "MIN_" ++ kind ++ "VERSION_" ++ name
++         in ( macro
++            , macro ++ "(major1,major2,minor)"
++            , concat
++                [ "((major1)<" ++ x
++                , "||(major1)==" ++ x ++ "&&(major2)<" ++ y
++                , "||(major1)==" ++ x ++ "&&(major2)==" ++ y ++ "&&(minor)<=" ++ minor
++                , ")"
++                ]
++            )
++      ]
++
++-- | The data of the @cabal_macros.h@ for the given configured package.
++cabalMacros :: PackageDescription -> LocalBuildInfo -> ComponentLocalBuildInfo -> Z.Z
++cabalMacros pkg_descr lbi clbi =
++  Z.Z
++    { Z.zPackages = map mkZPackage $ package pkg_descr : map getPid (componentPackageDeps clbi)
++    , Z.zTools =
++        [ Z.ZTool
+             { Z.ztoolName = programId prog
+             , Z.ztoolVersion = ver
+             , Z.ztoolX = major1
+             , Z.ztoolY = major2
+             , Z.ztoolZ = minor
+             }
+-          | prog <- configuredPrograms $ withPrograms lbi
+-          , ver <- maybeToList (programVersion prog)
+-          , let (major1, major2, minor) = majorMinor ver
+-          ]
+-      , Z.zPackageKey = case clbi of
+-          LibComponentLocalBuildInfo{componentCompatPackageKey = compatPackageKey} -> compatPackageKey
+-          _ -> ""
+-      , Z.zComponentId = prettyShow (componentComponentId clbi)
+-      , Z.zPackageVersion = pkgVersion (package pkg_descr)
+-      , Z.zNotNull = not . null
+-      , Z.zManglePkgName = map fixchar . unPackageName
+-      , Z.zMangleStr = map fixchar
+-      }
++        | prog <- configuredPrograms $ withPrograms lbi
++        , ver <- maybeToList (programVersion prog)
++        , let (major1, major2, minor) = majorMinor ver
++        ]
++    , Z.zPackageKey = case clbi of
++        LibComponentLocalBuildInfo{componentCompatPackageKey = compatPackageKey} -> compatPackageKey
++        _ -> ""
++    , Z.zComponentId = prettyShow (componentComponentId clbi)
++    , Z.zPackageVersion = pkgVersion (package pkg_descr)
++    , Z.zNotNull = not . null
++    , Z.zManglePkgName = map fixchar . unPackageName
++    , Z.zMangleStr = map fixchar
++    }
+   where
+     getPid (_, MungedPackageId (MungedPackageName pn _) v) =
+       -- NB: Drop the library name! We're just reporting package versions.
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index f73e7ebef..6f6c4de87 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -46,6 +46,7 @@ import Distribution.Package hiding (installedUnitId)
+ import Distribution.PackageDescription
+ import Distribution.Parsec (simpleParsec)
+ import Distribution.Pretty
++import Distribution.Simple.Build.Macros (generateCabalMacrosOptions)
+ import Distribution.Simple.BuildPaths
+ import Distribution.Simple.Compiler
+ import Distribution.Simple.Errors
+@@ -425,7 +426,7 @@ buildLib verbosity pkg_descr lbi lib clbi = do
+   createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
+   unless (null (cSources bi)) $
+     warn verbosity "MicroHs cannot include C sources in a library; ignoring them."
+-  runMhs verbosity lbi bi clbi $
++  runMhs verbosity pkg_descr lbi bi clbi $
+     ["-P" ++ pkgId, "-o", interpretSymbolicPathCWD pkgFile]
+       ++ map prettyShow modules
+ 
+@@ -436,7 +437,7 @@ buildExe
+   -> Executable
+   -> ComponentLocalBuildInfo
+   -> IO ()
+-buildExe verbosity _pkg_descr lbi exe clbi = do
++buildExe verbosity pkg_descr lbi exe clbi = do
+   let bi = buildInfo exe
+       exeName' = prettyShow (exeName exe)
+       targetDir = buildDir lbi </> makeRelativePathEx exeName'
+@@ -444,7 +445,7 @@ buildExe verbosity _pkg_descr lbi exe clbi = do
+       u = interpretSymbolicPathCWD -- See Note [Symbolic paths] in Distribution.Utils.Path
+   srcMainPath <- findFileCwd verbosity (mbWorkDirLBI lbi) (sourceDirs bi) (modulePath exe)
+   createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
+-  runMhs verbosity lbi bi clbi $
++  runMhs verbosity pkg_descr lbi bi clbi $
+     map u (cSources bi)
+       ++ ["-o", u exeFile, u srcMainPath]
+ 
+@@ -452,12 +453,13 @@ buildExe verbosity _pkg_descr lbi exe clbi = do
+ -- by the given ones.
+ runMhs
+   :: Verbosity
++  -> PackageDescription
+   -> LocalBuildInfo
+   -> BuildInfo
+   -> ComponentLocalBuildInfo
+   -> [String]
+   -> IO ()
+-runMhs verbosity lbi bi clbi args = do
++runMhs verbosity pkg_descr lbi bi clbi args = do
+   let comp = compiler lbi
+       mbWorkDir = mbWorkDirLBI lbi
+       progdb = withPrograms lbi
+@@ -478,7 +480,11 @@ runMhs verbosity lbi bi clbi args = do
+           ++ ["-p" ++ pkgFile | pkgFile <- pkgFiles]
+           ++ languageToFlags comp (defaultLanguage bi)
+           ++ extensionsToFlags comp (usedExtensions bi)
+-          -- mhs passes only -D and -I options on to cpphs.
++          -- mhs passes only -D and -I options on to cpphs, so the macros of
++          -- cabal_macros.h are defined one by one rather than included. The
++          -- header is found for the modules that include it themselves.
++          ++ generateCabalMacrosOptions pkg_descr lbi clbi
++          ++ ["-I" ++ u (autogenComponentModulesDir lbi clbi)]
+           ++ [opt | opt <- cppOptions bi, any (`isPrefixOf` opt) ["-D", "-I"]]
+           ++ ["-I" ++ u dir | dir <- includeDirs bi]
+           ++ hcOptions MHS bi
+diff --git a/cabal-testsuite/PackageTests/MHS/app/Main.hs b/cabal-testsuite/PackageTests/MHS/Build/app/Main.hs
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/app/Main.hs
+rename to cabal-testsuite/PackageTests/MHS/Build/app/Main.hs
+diff --git a/cabal-testsuite/PackageTests/MHS/cabal.project b/cabal-testsuite/PackageTests/MHS/Build/cabal.project
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/cabal.project
+rename to cabal-testsuite/PackageTests/MHS/Build/cabal.project
+diff --git a/cabal-testsuite/PackageTests/MHS/cabal.test.hs b/cabal-testsuite/PackageTests/MHS/Build/cabal.test.hs
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/cabal.test.hs
+rename to cabal-testsuite/PackageTests/MHS/Build/cabal.test.hs
+diff --git a/cabal-testsuite/PackageTests/MHS/mhs-test.cabal b/cabal-testsuite/PackageTests/MHS/Build/mhs-test.cabal
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/mhs-test.cabal
+rename to cabal-testsuite/PackageTests/MHS/Build/mhs-test.cabal
+diff --git a/cabal-testsuite/PackageTests/MHS/src/Greeting.hs b/cabal-testsuite/PackageTests/MHS/Build/src/Greeting.hs
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/src/Greeting.hs
+rename to cabal-testsuite/PackageTests/MHS/Build/src/Greeting.hs
+diff --git a/cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs b/cabal-testsuite/PackageTests/MHS/Build/src/Greeting/Internal.hs
+similarity index 100%
+rename from cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs
+rename to cabal-testsuite/PackageTests/MHS/Build/src/Greeting/Internal.hs
+diff --git a/cabal-testsuite/PackageTests/MHS/Macros/app/Main.hs b/cabal-testsuite/PackageTests/MHS/Macros/app/Main.hs
+new file mode 100644
+index 000000000..dea176d88
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/Macros/app/Main.hs
+@@ -0,0 +1,15 @@
++{-# LANGUAGE CPP #-}
++
++module Main (main) where
++
++-- The header itself, for the modules that include it, is found too.
++#include "cabal_macros.h"
++
++import Versions (versions)
++
++main :: IO ()
++main = do
++  mapM_ putStrLn versions
++#if MIN_VERSION_mhs_macros(1,0,0)
++  putStrLn ("library " ++ VERSION_mhs_macros)
++#endif
+diff --git a/cabal-testsuite/PackageTests/MHS/Macros/cabal.project b/cabal-testsuite/PackageTests/MHS/Macros/cabal.project
+new file mode 100644
+index 000000000..3dccaec79
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/Macros/cabal.project
+@@ -0,0 +1,3 @@
++packages: .
++compiler: mhs
++with-compiler: mhs
+diff --git a/cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs b/cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs
+new file mode 100644
+index 000000000..a6500d5e6
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs
+@@ -0,0 +1,15 @@
++import Test.Cabal.Prelude
++
++-- The version macros of cabal_macros.h with MicroHs, if it is installed with
++-- cpphs, which it runs for CPP.
++main = cabalTest $ do
++    skipUnless "no mhs" =<< isAvailableProgram mhsProgram
++    skipUnless "no cpphs" =<< isAvailableProgram cpphsProgram
++    recordMode DoNotRecord $ do
++        cabal "v2-build" ["all"]
++        out <- cabal' "v2-run" ["mhs-macros"]
++        assertOutputContains "base 4.19.1.0" out
++        assertOutputContains "bytestring 0.12.1.0" out
++        assertOutputContains "package 1.0" out
++        assertOutputContains "tool mhs" out
++        assertOutputContains "library 1.0" out
+diff --git a/cabal-testsuite/PackageTests/MHS/Macros/mhs-macros.cabal b/cabal-testsuite/PackageTests/MHS/Macros/mhs-macros.cabal
+new file mode 100644
+index 000000000..49e26685d
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/Macros/mhs-macros.cabal
+@@ -0,0 +1,18 @@
++cabal-version:   3.0
++name:            mhs-macros
++version:         1.0
++build-type:      Simple
++license:         BSD-3-Clause
++synopsis:        The version macros of cabal_macros.h with MicroHs
++
++library
++    exposed-modules:  Versions
++    build-depends:    base >=4.14 && <5, bytestring >=0.11
++    hs-source-dirs:   src
++    default-language: Haskell2010
++
++executable mhs-macros
++    main-is:          Main.hs
++    build-depends:    base, mhs-macros
++    hs-source-dirs:   app
++    default-language: Haskell2010
+diff --git a/cabal-testsuite/PackageTests/MHS/Macros/src/Versions.hs b/cabal-testsuite/PackageTests/MHS/Macros/src/Versions.hs
+new file mode 100644
+index 000000000..9422824ac
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/Macros/src/Versions.hs
+@@ -0,0 +1,29 @@
++{-# LANGUAGE CPP #-}
++
++-- | The versions that the macros of cabal_macros.h give, which Cabal passes to
++-- mhs as -D options.
++module Versions (versions) where
++
++versions :: [String]
++versions = [base, bytestring, "package " ++ CURRENT_PACKAGE_VERSION, tool]
++
++base :: String
++#if MIN_VERSION_base(4,19,0) && !MIN_VERSION_base(5,0,0)
++base = "base " ++ VERSION_base
++#else
++base = "MIN_VERSION_base is missing or wrong"
++#endif
++
++bytestring :: String
++#if MIN_VERSION_bytestring(0,11,0)
++bytestring = "bytestring " ++ VERSION_bytestring
++#else
++bytestring = "MIN_VERSION_bytestring is missing or wrong"
++#endif
++
++tool :: String
++#if defined(MIN_TOOL_VERSION_mhs)
++tool = "tool mhs"
++#else
++tool = "MIN_TOOL_VERSION_mhs is missing"
++#endif
+diff --git a/changelog.d/pr-11392.md b/changelog.d/pr-11392.md
+index c26959c72..8413d20ce 100644
+--- a/changelog.d/pr-11392.md
++++ b/changelog.d/pr-11392.md
+@@ -26,4 +26,5 @@ own, at the versions MicroCabal uses for the same purpose.
+ Since mhs ignores the `LANGUAGE` pragmas of the extensions it does not
+ implement, packages are not rejected for the extensions they declare, and
+ `reexported-modules` are accepted, as mhs sees all the modules of the
+-packages it loads.
++packages it loads. The macros of `cabal_macros.h`, such as `MIN_VERSION_base`,
++are passed to mhs as `-D` options of its preprocessor.
+-- 
+2.54.0
+

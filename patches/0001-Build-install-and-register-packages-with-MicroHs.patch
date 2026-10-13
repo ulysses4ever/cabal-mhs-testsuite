@@ -1,0 +1,1023 @@
+From 4b14ee97828f5e2c29091a186351f2e42903fb6d Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Mon, 12 Oct 2026 09:01:36 -0400
+Subject: [PATCH 1/7] Build, install and register packages with MicroHs
+
+Fill in the MicroHs backend of Cabal so that cabal-install can build simple
+packages with mhs: a library with exposed and other modules, and executables
+depending on it, in place or in the store.
+
+MicroHs compiles a library into a single package file, and finds installed
+packages through a search path of directories with an index of the modules
+they provide. Cabal maps its package databases onto this as follows (see
+Note [MicroHs package databases] in Distribution.Simple.MHS):
+
+* The global database is the default search path of mhs, reported by
+  'mhs -L'; its packages (base, MicroHs) are described by 'mhs -L<pkgfile>'
+  and get <name>-<version> as their unit id, which is what the solver and
+  'configure' then refer to.
+* A database of Cabal is a directory of <unit-id>.conf registration files;
+  the package file of a library stays in its build directory or, once
+  installed, in its library directory.
+* A component is compiled with the package files of its dependency closure
+  preloaded (-p) and the search path cleared (-a), so that it sees exactly
+  the packages it depends on, and a library rebuilt in place is picked up
+  by its dependents without re-registration.
+
+Executables are linked by mhs into <builddir>/<exe>/<exe>, where cabal-install
+expects them, so 'cabal run' and 'cabal list-bin' work. 'Setup configure'
+gains a --mhs flag, the package databases are monitored for changes, and
+'cabal path' knows the compiler program.
+
+The extensions mhs supports (all enabled at all times, CPP excepted) come
+from https://github.com/augustss/MicroHs/wiki/Language.
+
+Tested with mhs 0.16.9.0 and 0.15.4.0: cabal build/run/list-bin of a library
+with a hidden module plus an executable, an up-to-date rebuild, a rebuild
+after editing the hidden module, and 'cabal install' of the executable
+through the store. A cabal-testsuite test covers the first of these and is
+skipped when mhs is not installed.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ .typos.toml                                   |   4 +
+ Cabal/src/Distribution/Simple/Configure.hs    |   7 +
+ Cabal/src/Distribution/Simple/Errors.hs       |  24 +
+ Cabal/src/Distribution/Simple/Install.hs      |   3 +
+ Cabal/src/Distribution/Simple/MHS.hs          | 518 ++++++++++++++++--
+ Cabal/src/Distribution/Simple/Register.hs     |   4 +
+ Cabal/src/Distribution/Simple/Setup/Config.hs |   1 +
+ .../src/Distribution/Client/CmdPath.hs        |   1 +
+ cabal-testsuite/PackageTests/MHS/app/Main.hs  |   6 +
+ .../PackageTests/MHS/cabal.project            |   3 +
+ .../PackageTests/MHS/cabal.test.hs            |   8 +
+ .../PackageTests/MHS/mhs-test.cabal           |  19 +
+ .../PackageTests/MHS/src/Greeting.hs          |   6 +
+ .../PackageTests/MHS/src/Greeting/Internal.hs |   4 +
+ changelog.d/pr-11392.md                       |  18 +
+ doc/cabal-package-description-file.rst        |   2 +-
+ doc/cabal-project-description-file.rst        |   2 +-
+ doc/config.rst                                |   2 +
+ doc/setup-commands.rst                        |   3 +-
+ 19 files changed, 597 insertions(+), 38 deletions(-)
+ create mode 100644 cabal-testsuite/PackageTests/MHS/app/Main.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/cabal.project
+ create mode 100644 cabal-testsuite/PackageTests/MHS/cabal.test.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/mhs-test.cabal
+ create mode 100644 cabal-testsuite/PackageTests/MHS/src/Greeting.hs
+ create mode 100644 cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs
+ create mode 100644 changelog.d/pr-11392.md
+
+diff --git a/.typos.toml b/.typos.toml
+index d22851a7a..ad23cb2c7 100644
+--- a/.typos.toml
++++ b/.typos.toml
+@@ -5,3 +5,7 @@ extend-ignore-re = ["(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchec
+ # Extinguish false positive in cabal-package-description-file.rst. 'Nd' is a
+ # Unicode category, not a misspelling of 'And'.
+ nd = "nd"
++
++[default.extend-identifiers]
++# A language extension of MicroHs.
++TypeLits = "TypeLits"
+diff --git a/Cabal/src/Distribution/Simple/Configure.hs b/Cabal/src/Distribution/Simple/Configure.hs
+index 54c0c9975..4a51d2113 100644
+--- a/Cabal/src/Distribution/Simple/Configure.hs
++++ b/Cabal/src/Distribution/Simple/Configure.hs
+@@ -2129,6 +2129,13 @@ getInstalledPackagesMonitorFiles verbosity comp mbWorkDir packageDBs progdb plat
+         platform
+         progdb
+         packageDBs
++    MHS ->
++      MHS.getInstalledPackagesMonitorFiles
++        verbosity
++        comp
++        progdb
++        mbWorkDir
++        packageDBs
+     other -> do
+       warn verbosity $
+         "don't know how to find change monitoring files for "
+diff --git a/Cabal/src/Distribution/Simple/Errors.hs b/Cabal/src/Distribution/Simple/Errors.hs
+index 230c18cef..e54cce493 100644
+--- a/Cabal/src/Distribution/Simple/Errors.hs
++++ b/Cabal/src/Distribution/Simple/Errors.hs
+@@ -170,6 +170,10 @@ data CabalException
+   | MissingCoveredInstalledLibrary UnitId
+   | SetupHooksException SetupHooksException
+   | MultiReplDoesNotSupportComplexReexportedModules PackageName ComponentName
++  | MhsNoGlobalPackageDb
++  | MhsPackageFileNotFound FilePath [FilePath]
++  | MhsRegistrationFileParseError FilePath [String]
++  | MhsMissingDependencies [UnitId]
+   deriving (Show)
+ 
+ exceptionCode :: CabalException -> Int
+@@ -304,6 +308,10 @@ exceptionCode e = case e of
+   SetupHooksException err ->
+     setupHooksExceptionCode err
+   MultiReplDoesNotSupportComplexReexportedModules{} -> 9355
++  MhsNoGlobalPackageDb{} -> 3201
++  MhsPackageFileNotFound{} -> 3202
++  MhsRegistrationFileParseError{} -> 3203
++  MhsMissingDependencies{} -> 3204
+ 
+ versionRequirement :: VersionRange -> String
+ versionRequirement range
+@@ -804,3 +812,19 @@ exceptionMessage e = case e of
+       ++ prettyShow pname
+       ++ " a module renaming was found.\n"
+       ++ "Multi-repl does not work with complicated reexported-modules until GHC-9.12."
++  MhsNoGlobalPackageDb ->
++    "mhs does not report a package directory to register the package in (see 'mhs -L')."
++  MhsPackageFileNotFound pkgFile dirs ->
++    "Cannot find the MicroHs package file "
++      ++ pkgFile
++      ++ " in "
++      ++ intercalate ", " dirs
++  MhsRegistrationFileParseError file errs ->
++    "Failed to parse the package registration file "
++      ++ file
++      ++ ":\n"
++      ++ unlines errs
++  MhsMissingDependencies unitIds ->
++    "Failed to find the installed units "
++      ++ intercalate ", " (map prettyShow unitIds)
++      ++ " in the package database stack."
+diff --git a/Cabal/src/Distribution/Simple/Install.hs b/Cabal/src/Distribution/Simple/Install.hs
+index 50cef3e09..eb1e7a003 100644
+--- a/Cabal/src/Distribution/Simple/Install.hs
++++ b/Cabal/src/Distribution/Simple/Install.hs
+@@ -74,6 +74,7 @@ import Distribution.Compat.Graph (IsNode (..))
+ import Distribution.Simple.Errors
+ import qualified Distribution.Simple.GHC as GHC
+ import qualified Distribution.Simple.GHCJS as GHCJS
++import qualified Distribution.Simple.MHS as MHS
+ import Distribution.Simple.Setup.Common
+ import qualified Distribution.Simple.UHC as UHC
+ 
+@@ -248,6 +249,7 @@ copyComponent verbosity pkg_descr lbi (CLib lib) clbi copydest = do
+     GHC -> GHC.installLib verbosity lbi libPref dynlibPref buildPref pkg_descr lib clbi
+     GHCJS -> GHCJS.installLib verbosity lbi libPref dynlibPref buildPref pkg_descr lib clbi
+     UHC -> UHC.installLib verbosity lbi libPref dynlibPref buildPref pkg_descr lib clbi
++    MHS -> MHS.installLib verbosity lbi libPref dynlibPref buildPref pkg_descr lib clbi
+     _ ->
+       dieWithException verbosity $ CompilerNotInstalled (compilerFlavor (compiler lbi))
+ copyComponent verbosity pkg_descr lbi (CFLib flib) clbi copydest = do
+@@ -296,6 +298,7 @@ copyComponent verbosity pkg_descr lbi (CExe exe) clbi copydest = do
+     GHC -> GHC.installExe verbosity lbi binPref buildPref progFix pkg_descr exe
+     GHCJS -> GHCJS.installExe verbosity lbi binPref buildPref progFix pkg_descr exe
+     UHC -> return ()
++    MHS -> MHS.installExe verbosity lbi binPref buildPref progFix pkg_descr exe
+     _ ->
+       dieWithException verbosity $ CompilerNotInstalled (compilerFlavor (compiler lbi))
+ 
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index 57453a52e..c5bcff8e0 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -1,6 +1,6 @@
++{-# LANGUAGE DataKinds #-}
+ {-# LANGUAGE FlexibleContexts #-}
+ {-# LANGUAGE RankNTypes #-}
+-{-# LANGUAGE DataKinds #-}
+ 
+ -----------------------------------------------------------------------------
+ 
+@@ -12,15 +12,21 @@
+ -- Maintainer  :  cabal-devel@haskell.org
+ -- Portability :  portable
+ --
+--- This module contains most of the MHS-specific code for configuring, building
+--- and installing packages.
+-
++-- This module contains most of the MicroHs-specific code for configuring,
++-- building and installing packages.
++--
++-- MicroHs (@mhs@, <https://github.com/augustss/MicroHs>) is a small Haskell
++-- compiler that compiles to combinators. See Note [MicroHs package databases]
++-- for how its packages are mapped onto the package databases of Cabal.
+ module Distribution.Simple.MHS
+   ( configure
+   , getInstalledPackages
++  , getInstalledPackagesMonitorFiles
+   , buildLib
+   , buildExe
+   , installLib
++  , installExe
++  , createPackageDB
+   , registerPackage
+   ) where
+ 
+@@ -28,20 +34,68 @@ import Distribution.Compat.Prelude
+ import Prelude ()
+ 
+ import Distribution.InstalledPackageInfo
++  ( ExposedModule (..)
++  , InstalledPackageInfo
++  , emptyInstalledPackageInfo
++  , parseInstalledPackageInfo
++  , showInstalledPackageInfo
++  )
++import qualified Distribution.InstalledPackageInfo as IPI
++import Distribution.ModuleName (ModuleName)
++import Distribution.Package hiding (installedUnitId)
+ import Distribution.PackageDescription
++import Distribution.Parsec (simpleParsec)
+ import Distribution.Pretty
++import Distribution.Simple.BuildPaths
+ import Distribution.Simple.Compiler
++import Distribution.Simple.Errors
+ import Distribution.Simple.LocalBuildInfo
++import Distribution.Simple.PackageIndex (InstalledPackageIndex)
++import qualified Distribution.Simple.PackageIndex as PackageIndex
+ import Distribution.Simple.Program
+ import Distribution.Simple.Utils
++import Distribution.System (Platform)
++import Distribution.Types.MungedPackageId (computeCompatPackageId)
++import Distribution.Types.MungedPackageName (MungedPackageName (..), decodeCompatPackageName)
+ import Distribution.Utils.Path
+ import Distribution.Verbosity
+-import qualified Data.Map as Map (empty)
+-import Distribution.System (Platform)
+-import Distribution.Version (mkVersion, orLaterVersion)
++import Distribution.Version
+ import Language.Haskell.Extension
+-import Distribution.Simple.PackageIndex (InstalledPackageIndex)
+-import qualified Distribution.Simple.PackageIndex as PackageIndex
++
++import qualified Data.ByteString as BS
++import qualified Data.Map as Map (empty)
++import System.Directory (doesDirectoryExist, getDirectoryContents, getHomeDirectory)
++import System.FilePath (takeDirectory, takeExtension, takeFileName)
++
++{- Note [MicroHs package databases]
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++MicroHs compiles a library into a single package file, <name>-<version>.pkg,
++which 'mhs -P<name>-<version>' writes. When compiling, mhs loads the package
++files it is told to with -p<pkgfile>, and finds the ones it is not told about
++through its package search path: directories of the layout that
++'mhs -Q <pkgfile> <dir>' creates,
++
++  <dir>/packages/<name>-<version>.pkg   the compiled package
++  <dir>/<Module>/<Name>.txt             one index file per exposed module,
++                                        naming the package that provides it
++
++A package database of Cabal is a directory of registration files,
++<dir>/<unit-id>.conf, each the InstalledPackageInfo of a library, whose
++package file stays where the library was built or installed: in its
++library-dirs. When building a component, every package in the dependency
++closure of the component is preloaded from there and the search path of mhs
++is cleared, so that the component sees exactly the packages it depends on, as
++it would with GHC. A library rebuilt in place is thus picked up by its
++dependents without being registered again.
++
++GlobalPackageDB is the default search path of mhs, as 'mhs -L' reports it; it
++holds the packages that come with mhs, such as base. UserPackageDB is
++~/.mcabal/mhs-<version>, where MicroCabal, the package manager of MicroHs,
++installs packages for the user. The packages of these directories have no
++registration file: they are described by what 'mhs -L<pkgfile>' reports about
++them, with <name>-<version> as their unit id. A directory given as
++SpecificPackageDB may hold such packages too.
++-}
+ 
+ -- -----------------------------------------------------------------------------
+ -- Configuring
+@@ -56,7 +110,7 @@ configure verbosity hcPath progdb = do
+     requireProgramVersion
+       verbosity
+       mhsProgram
+-      (orLaterVersion (mkVersion [0, 10, 0]))
++      (orLaterVersion (mkVersion [0, 15]))
+       (userMaybeSpecifyPath "mhs" hcPath progdb)
+ 
+   let comp =
+@@ -70,17 +124,110 @@ configure verbosity hcPath progdb = do
+           , compilerWiredInUnitIds = Nothing
+           }
+       compPlatform = Nothing
+-  info verbosity $ "MHS configured with languages: " ++ show (map fst mhsLanguages)
+   return (comp, compPlatform, progdb')
+ 
++-- | MicroHs has all the extensions it supports enabled at all times, so it
++-- accepts every language.
+ mhsLanguages :: [(Language, CompilerFlag)]
+-mhsLanguages = [(Haskell2010, ""), (Haskell98, "")] -- MHS docs say it supports 2010 but 98 should be fine too
++mhsLanguages = [(lang, "") | lang <- knownLanguages]
+ 
++-- | The extensions that MicroHs supports. They are always enabled, except for
++-- CPP. See <https://github.com/augustss/MicroHs/wiki/Language>.
+ mhsLanguageExtensions :: [(Extension, Maybe CompilerFlag)]
+ mhsLanguageExtensions =
+-  [
+-  -- TODO: use the list from the MHS documentation
+-  ]
++  (EnableExtension CPP, Just "-XCPP")
++    : [(EnableExtension ext, Nothing) | ext <- alwaysOn]
++    ++ [(DisableExtension ext, Nothing) | ext <- alwaysOff]
++    ++ [(UnknownExtension ext, Nothing) | ext <- mhsSpecific]
++  where
++    alwaysOn =
++      [ AllowAmbiguousTypes
++      , BangPatterns
++      , BinaryLiterals
++      , BlockArguments
++      , CApiFFI
++      , ConstrainedClassMethods
++      , ConstraintKinds
++      , DefaultSignatures
++      , DeriveAnyClass
++      , DeriveDataTypeable
++      , DeriveFoldable
++      , DeriveFunctor
++      , DeriveTraversable
++      , DerivingStrategies
++      , DerivingVia
++      , DisambiguateRecordFields
++      , DoAndIfThenElse
++      , DuplicateRecordFields
++      , EmptyCase
++      , EmptyDataDecls
++      , EmptyDataDeriving
++      , ExistentialQuantification
++      , ExplicitForAll
++      , ExplicitNamespaces
++      , ExtendedDefaultRules
++      , FlexibleContexts
++      , FlexibleInstances
++      , ForeignFunctionInterface
++      , FunctionalDependencies
++      , GADTs
++      , GADTSyntax
++      , GeneralisedNewtypeDeriving
++      , GeneralizedNewtypeDeriving
++      , ImplicitPrelude
++      , ImportQualifiedPost
++      , IncoherentInstances
++      , InstanceSigs
++      , KindSignatures
++      , LambdaCase
++      , LiberalTypeSynonyms
++      , MagicHash
++      , MonomorphismRestriction
++      , MultilineStrings
++      , MultiParamTypeClasses
++      , MultiWayIf
++      , NamedDefaults
++      , NamedFieldPuns
++      , NegativeLiterals
++      , NondecreasingIndentation
++      , NumericUnderscores
++      , OrPatterns
++      , OverlappingInstances
++      , OverloadedRecordDot
++      , OverloadedRecordUpdate
++      , OverloadedStrings
++      , PatternGuards
++      , PatternSynonyms
++      , PolyKinds
++      , PolymorphicComponents
++      , PostfixOperators
++      , QualifiedDo
++      , Rank2Types
++      , RankNTypes
++      , RecordWildCards
++      , RecursiveDo
++      , RelaxedPolyRec
++      , RequiredTypeArguments
++      , ScopedTypeVariables
++      , StandaloneDeriving
++      , StandaloneKindSignatures
++      , TraditionalRecordSyntax
++      , TupleSections
++      , TypeApplications
++      , TypeOperators
++      , TypeSynonymInstances
++      , UndecidableInstances
++      , UndecidableSuperClasses
++      , UnicodeSyntax
++      , ViewPatterns
++      ]
++    -- NoDatatypeContexts and NoStarIsType
++    alwaysOff = [DatatypeContexts, StarIsType]
++    -- Extensions of MicroHs that GHC does not have.
++    mhsSpecific = ["ExtraInstanceBindings", "ImportShadowing", "TypeLits"]
++
++-- -----------------------------------------------------------------------------
++-- Installed packages
+ 
+ getInstalledPackages
+   :: Verbosity
+@@ -89,8 +236,176 @@ getInstalledPackages
+   -> PackageDBStackX (SymbolicPath from (Dir PkgDB))
+   -> ProgramDb
+   -> IO InstalledPackageIndex
+-getInstalledPackages _verbosity _comp _mbWorkDir _packagedbs _progdb =
+-  return (PackageIndex.fromList [])
++getInstalledPackages verbosity comp mbWorkDir packagedbs progdb = do
++  dirs <- packageDbDirs verbosity comp progdb mbWorkDir packagedbs
++  pkgs <- concat <$> traverse (readPackageDbDir verbosity progdb) dirs
++  return (PackageIndex.fromList pkgs)
++
++-- | The package databases are directories, which change when a package is
++-- registered in them. See Note [MicroHs package databases].
++getInstalledPackagesMonitorFiles
++  :: Verbosity
++  -> Compiler
++  -> ProgramDb
++  -> Maybe (SymbolicPath CWD (Dir from))
++  -> PackageDBStackX (SymbolicPath from (Dir PkgDB))
++  -> IO [FilePath]
++getInstalledPackagesMonitorFiles = packageDbDirs
++
++-- | The directories of the given package databases, in order.
++-- See Note [MicroHs package databases].
++packageDbDirs
++  :: Verbosity
++  -> Compiler
++  -> ProgramDb
++  -> Maybe (SymbolicPath CWD (Dir from))
++  -> PackageDBStackX (SymbolicPath from (Dir PkgDB))
++  -> IO [FilePath]
++packageDbDirs verbosity comp progdb mbWorkDir packagedbs =
++  ordNub . concat <$> traverse dirsOf packagedbs
++  where
++    dirsOf GlobalPackageDB = globalPackageDbDirs verbosity progdb
++    dirsOf UserPackageDB = (: []) <$> userPackageDbDir comp
++    dirsOf (SpecificPackageDB dir) = return [interpretSymbolicPath mbWorkDir dir]
++
++-- | The default package search path of mhs, as @mhs -L@ lists it:
++--
++-- > /path/to/mhs-0.16.9.0/packages:
++-- >   MicroHs-0.16.9.0
++-- >   base-0.16.9.0
++globalPackageDbDirs :: Verbosity -> ProgramDb -> IO [FilePath]
++globalPackageDbDirs verbosity progdb = do
++  output <- getDbProgramOutput verbosity mhsProgram progdb ["-L"]
++  -- The listing shows the packages subdirectories.
++  return
++    [ takeDirectory (dropWhileEnd (== ':') line)
++    | line@(c : _) <- lines output
++    , not (isSpace c)
++    , ":" `isSuffixOf` line
++    ]
++
++-- | Where MicroCabal installs packages for the user.
++userPackageDbDir :: Compiler -> IO FilePath
++userPackageDbDir comp = do
++  home <- getHomeDirectory
++  return (home </> ".mcabal" </> prettyShow (compilerId comp))
++
++-- | The packages of a package database directory.
++-- See Note [MicroHs package databases].
++readPackageDbDir :: Verbosity -> ProgramDb -> FilePath -> IO [InstalledPackageInfo]
++readPackageDbDir verbosity progdb dir = do
++  registered <- traverse (readRegistrationFile verbosity) =<< filesWithExtension ".conf" dir
++  let registeredPkgFiles = map mhsPackageFileName registered
++  pkgFiles <- filesWithExtension ".pkg" (dir </> "packages")
++  unregistered <-
++    traverse (describePackageFile verbosity progdb) $
++      [pkgFile | pkgFile <- pkgFiles, takeFileName pkgFile `notElem` registeredPkgFiles]
++  return (registered ++ catMaybes unregistered)
++
++-- | The paths of the files with the given extension in a directory, if the
++-- directory exists.
++filesWithExtension :: String -> FilePath -> IO [FilePath]
++filesWithExtension ext dir = do
++  exists <- doesDirectoryExist dir
++  if exists
++    then do
++      files <- getDirectoryContents dir
++      return [dir </> file | file <- sort files, takeExtension file == ext]
++    else return []
++
++-- | Read a registration file written by 'registerPackage'.
++readRegistrationFile :: Verbosity -> FilePath -> IO InstalledPackageInfo
++readRegistrationFile verbosity file = do
++  contents <- BS.readFile file
++  case parseInstalledPackageInfo contents of
++    Left errs -> dieWithException verbosity $ MhsRegistrationFileParseError file (toList errs)
++    Right (warnings, ipi) -> do
++      traverse_ (warn verbosity) warnings
++      return ipi
++
++-- | Describe a package that mhs or MicroCabal installed, from what
++-- @mhs -L<pkgfile>@ reports about it:
++--
++-- > name: base
++-- > version: 0.16.9.0
++-- > compiler: mhs-0.16.9.0
++-- > depends:
++-- > linker opts: -lm
++-- > exposed-modules:
++-- >   Control.Applicative
++-- >   ...
++-- > other-modules:
++-- >   ...
++describePackageFile :: Verbosity -> ProgramDb -> FilePath -> IO (Maybe InstalledPackageInfo)
++describePackageFile verbosity progdb pkgFile = do
++  output <- getDbProgramOutput verbosity mhsProgram progdb ["-L" ++ pkgFile]
++  let fields = parseFields output
++      field name = fromMaybe [] (lookup name fields)
++      modules :: String -> [ModuleName]
++      modules name = mapMaybe simpleParsec (field name)
++  case (field "name", field "version") of
++    ([name], [versionStr])
++      | Just version <- simpleParsec versionStr -> do
++          let MungedPackageName pname libname = decodeCompatPackageName (mkPackageName name)
++              pkgId = PackageIdentifier pname version
++              unitId = mkUnitId (mhsPackageId pkgId libname)
++          return $
++            Just
++              emptyInstalledPackageInfo
++                { IPI.sourcePackageId = pkgId
++                , IPI.sourceLibName = libname
++                , IPI.installedUnitId = unitId
++                , IPI.installedComponentId_ = mkComponentId (unUnitId unitId)
++                , IPI.exposed = True
++                , IPI.exposedModules = [ExposedModule m Nothing | m <- modules "exposed-modules"]
++                , IPI.hiddenModules = modules "other-modules"
++                , IPI.depends = map mkUnitId (field "depends")
++                , IPI.libraryDirs = [takeDirectory pkgFile]
++                , IPI.ldOptions = field "linker opts"
++                }
++    _ -> do
++      warn verbosity $
++        "Ignoring the MicroHs package file " ++ pkgFile ++ ", which mhs cannot describe."
++      return Nothing
++
++-- | Parse the fields of what @mhs -L<pkgfile>@ reports: a @name: value@ line
++-- starts a field, and the indented lines that follow continue it. The value
++-- of a field is its words.
++parseFields :: String -> [(String, [String])]
++parseFields = go . lines
++  where
++    go [] = []
++    go (line : rest)
++      | (name, ':' : value) <- break (== ':') line
++      , not (isIndented line) =
++          let (continuation, rest') = span isIndented rest
++           in (name, words value ++ concatMap words continuation) : go rest'
++      | otherwise = go rest
++    isIndented (c : _) = isSpace c
++    isIndented [] = False
++
++-- | The name under which mhs knows a library: @<name>-<version>@, with the
++-- munged name of the library, so that the sub-libraries of a package get
++-- distinct names.
++mhsPackageId :: PackageId -> LibraryName -> String
++mhsPackageId pkgId libname = prettyShow (computeCompatPackageId pkgId libname)
++
++-- | The name of the package file of a library, @<name>-<version>.pkg@.
++mhsPackageFileName :: InstalledPackageInfo -> FilePath
++mhsPackageFileName ipi = mhsPackageId (IPI.sourcePackageId ipi) (IPI.sourceLibName ipi) <.> "pkg"
++
++-- | The package file of a library, in one of its library directories; none if
++-- the library has no modules and mhs hence nothing to load.
++packageFile :: Verbosity -> InstalledPackageInfo -> IO (Maybe FilePath)
++packageFile verbosity ipi = do
++  let fileName = mhsPackageFileName ipi
++      dirs = IPI.libraryDirs ipi
++  mbFile <- findFirstFile id [dir </> fileName | dir <- dirs]
++  case mbFile of
++    Just file -> return (Just file)
++    Nothing
++      | null (IPI.exposedModules ipi) && null (IPI.hiddenModules ipi) -> return Nothing
++      | otherwise -> dieWithException verbosity $ MhsPackageFileNotFound fileName dirs
+ 
+ -- -----------------------------------------------------------------------------
+ -- Building
+@@ -102,7 +417,23 @@ buildLib
+   -> Library
+   -> ComponentLocalBuildInfo
+   -> IO ()
+-buildLib _verbosity _pkg_descr _lbi _lib _clbi = return ()
++buildLib verbosity pkg_descr lbi lib clbi = do
++  let bi = libBuildInfo lib
++      pkgId = mhsPackageId (packageId pkg_descr) (libName lib)
++      targetDir = componentBuildDir lbi clbi
++      pkgFile = targetDir </> makeRelativePathEx (pkgId <.> "pkg")
++      -- The modules given to mhs are the ones that the package exposes; it
++      -- finds the other modules through the imports. A library without exposed
++      -- modules has to expose its other modules to be of any use.
++      modules
++        | null (exposedModules lib) = otherModules bi
++        | otherwise = exposedModules lib
++  createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
++  unless (null (cSources bi)) $
++    warn verbosity "MicroHs cannot include C sources in a library; ignoring them."
++  runMhs verbosity lbi bi clbi $
++    ["-P" ++ pkgId, "-o", interpretSymbolicPathCWD pkgFile]
++      ++ map prettyShow modules
+ 
+ buildExe
+   :: Verbosity
+@@ -111,21 +442,91 @@ buildExe
+   -> Executable
+   -> ComponentLocalBuildInfo
+   -> IO ()
+-buildExe verbosity _pkg_descr lbi exe _clbi = do
+-  let runMhsProg = runDbProgramCwd verbosity (mbWorkDirLBI lbi) mhsProgram (withPrograms lbi)
+-  
+-  let mbWorkDir = mbWorkDirLBI lbi
+-  srcMainPath <- findFileCwd verbosity mbWorkDir (hsSourceDirs $ buildInfo exe) (modulePath exe)
+-  
+-  let odir = buildDir lbi
+-      u = interpretSymbolicPathCWD
+-      
+-      mhsArgs = 
+-           ["-i" ++ u d | d <- hsSourceDirs (buildInfo exe)]
+-        ++ ["-o", u $ odir </> makeRelativePathEx (prettyShow (exeName exe))]
+-        ++ [u srcMainPath]
+-
+-  runMhsProg mhsArgs
++buildExe verbosity _pkg_descr lbi exe clbi = do
++  let bi = buildInfo exe
++      exeName' = prettyShow (exeName exe)
++      targetDir = buildDir lbi </> makeRelativePathEx exeName'
++      exeFile = targetDir </> makeRelativePathEx (exeName' <.> exeExtension (hostPlatform lbi))
++      u = interpretSymbolicPathCWD -- See Note [Symbolic paths] in Distribution.Utils.Path
++  srcMainPath <- findFileCwd verbosity (mbWorkDirLBI lbi) (sourceDirs bi) (modulePath exe)
++  createDirectoryIfMissingVerbose verbosity True (interpretSymbolicPathLBI lbi targetDir)
++  runMhs verbosity lbi bi clbi $
++    map u (cSources bi)
++      ++ ["-o", u exeFile, u srcMainPath]
++
++-- | Run mhs with the arguments common to libraries and executables, followed
++-- by the given ones.
++runMhs
++  :: Verbosity
++  -> LocalBuildInfo
++  -> BuildInfo
++  -> ComponentLocalBuildInfo
++  -> [String]
++  -> IO ()
++runMhs verbosity lbi bi clbi args = do
++  let comp = compiler lbi
++      mbWorkDir = mbWorkDirLBI lbi
++      progdb = withPrograms lbi
++      u = interpretSymbolicPathCWD -- See Note [Symbolic paths] in Distribution.Utils.Path
++  pkgFiles <- dependencyPackageFiles verbosity lbi clbi
++  let commonArgs =
++        verbosityFlags verbosity
++          -- The module search path: the source directories of the component
++          -- instead of the default, the current directory.
++          ++ ["-i"]
++          ++ ["-i" ++ u dir | dir <- sourceDirs bi]
++          ++ ["-i" ++ u (autogenComponentModulesDir lbi clbi)]
++          ++ ["-i" ++ u (autogenPackageModulesDir lbi)]
++          -- The packages: the dependencies of the component, preloaded, instead
++          -- of whatever is on the package search path.
++          -- See Note [MicroHs package databases].
++          ++ ["-a"]
++          ++ ["-p" ++ pkgFile | pkgFile <- pkgFiles]
++          ++ languageToFlags comp (defaultLanguage bi)
++          ++ extensionsToFlags comp (usedExtensions bi)
++          -- mhs passes only -D and -I options on to cpphs.
++          ++ [opt | opt <- cppOptions bi, any (`isPrefixOf` opt) ["-D", "-I"]]
++          ++ ["-I" ++ u dir | dir <- includeDirs bi]
++          ++ hcOptions MHS bi
++          ++ concat [["-optl", opt] | opt <- linkerOptions]
++      linkerOptions =
++        ["-L" ++ u dir | dir <- extraLibDirs bi]
++          ++ ["-l" ++ lib | lib <- extraLibs bi]
++          ++ ldOptions bi
++  runDbProgramCwd verbosity mbWorkDir mhsProgram progdb (commonArgs ++ args)
++
++-- | The package files of the dependencies of a component, closed under the
++-- dependencies of the dependencies.
++dependencyPackageFiles :: Verbosity -> LocalBuildInfo -> ComponentLocalBuildInfo -> IO [FilePath]
++dependencyPackageFiles verbosity lbi clbi = do
++  -- Read the package databases again rather than using 'installedPkgs', which
++  -- predates the libraries registered in place since the package was configured.
++  index <-
++    getInstalledPackages verbosity (compiler lbi) (mbWorkDirLBI lbi) (withPackageDB lbi) (withPrograms lbi)
++  let deps = map fst (componentPackageDeps clbi)
++  closure <- case PackageIndex.dependencyClosure index deps of
++    Left closure -> return (PackageIndex.allPackages closure)
++    Right broken ->
++      dieWithException verbosity $
++        MhsMissingDependencies $
++          ordNub $
++            [dep | dep <- deps, isNothing (PackageIndex.lookupUnitId index dep)]
++              ++ concatMap snd broken
++  catMaybes <$> traverse (packageFile verbosity) closure
++
++-- | The source directories of a component; the package directory if none are
++-- given.
++sourceDirs :: BuildInfo -> [SymbolicPath Pkg (Dir Source)]
++sourceDirs bi
++  | null (hsSourceDirs bi) = [sameDirectory]
++  | otherwise = ordNub (hsSourceDirs bi)
++
++verbosityFlags :: Verbosity -> [String]
++verbosityFlags verbosity
++  | verbosity >= deafening = ["-v", "-v"]
++  | verbosity >= verbose = ["-v"]
++  | verbosity < normal = ["-q"]
++  | otherwise = []
+ 
+ -- -----------------------------------------------------------------------------
+ -- Installation
+@@ -134,17 +535,52 @@ installLib
+   :: Verbosity
+   -> LocalBuildInfo
+   -> FilePath
++  -- ^ install location
+   -> FilePath
++  -- ^ install location for dynamic libraries (unused)
+   -> FilePath
++  -- ^ build location
+   -> PackageDescription
+   -> Library
+   -> ComponentLocalBuildInfo
+   -> IO ()
+-installLib _verbosity _lbi _targetDir _dynlibTargetDir _builtDir _pkg _library _clbi = return ()
++installLib verbosity _lbi targetDir _dynlibTargetDir builtDir pkg lib _clbi = do
++  let pkgFile = mhsPackageId (packageId pkg) (libName lib) <.> "pkg"
++  createDirectoryIfMissingVerbose verbosity True targetDir
++  installOrdinaryFile verbosity (builtDir </> pkgFile) (targetDir </> pkgFile)
++
++installExe
++  :: Verbosity
++  -> LocalBuildInfo
++  -> FilePath
++  -- ^ install location
++  -> FilePath
++  -- ^ build location
++  -> (FilePath, FilePath)
++  -- ^ executable (prefix, suffix)
++  -> PackageDescription
++  -> Executable
++  -> IO ()
++installExe verbosity lbi binDir buildPref (progprefix, progsuffix) _pkg exe = do
++  let exeName' = prettyShow (exeName exe)
++      ext = exeExtension (hostPlatform lbi)
++  createDirectoryIfMissingVerbose verbosity True binDir
++  installExecutableFile
++    verbosity
++    (buildPref </> exeName' </> exeName' <.> ext)
++    (binDir </> progprefix ++ exeName' ++ progsuffix <.> ext)
+ 
+ -- -----------------------------------------------------------------------------
+ -- Registering
+ 
++-- | An empty package database is an empty directory.
++-- See Note [MicroHs package databases].
++createPackageDB :: Verbosity -> FilePath -> IO ()
++createPackageDB verbosity dbPath =
++  createDirectoryIfMissingVerbose verbosity True dbPath
++
++-- | Register a library by writing its registration file into the database.
++-- See Note [MicroHs package databases].
+ registerPackage
+   :: Verbosity
+   -> Maybe (SymbolicPath CWD (Dir from))
+@@ -153,4 +589,16 @@ registerPackage
+   -> PackageDBStackS from
+   -> InstalledPackageInfo
+   -> IO ()
+-registerPackage _verbosity _mbWorkDir _comp _progdb _packageDbs _installedPkgInfo = return ()
++registerPackage verbosity mbWorkDir comp progdb packageDbs installedPkgInfo = do
++  dbDir <- case registrationPackageDB packageDbs of
++    GlobalPackageDB -> do
++      dirs <- globalPackageDbDirs verbosity progdb
++      case dirs of
++        dir : _ -> return dir
++        [] -> dieWithException verbosity MhsNoGlobalPackageDb
++    UserPackageDB -> userPackageDbDir comp
++    SpecificPackageDB dir -> return (interpretSymbolicPath mbWorkDir dir)
++  createDirectoryIfMissingVerbose verbosity True dbDir
++  writeUTF8File
++    (dbDir </> prettyShow (IPI.installedUnitId installedPkgInfo) <.> "conf")
++    (showInstalledPackageInfo installedPkgInfo)
+diff --git a/Cabal/src/Distribution/Simple/Register.hs b/Cabal/src/Distribution/Simple/Register.hs
+index 489627827..64975bc9a 100644
+--- a/Cabal/src/Distribution/Simple/Register.hs
++++ b/Cabal/src/Distribution/Simple/Register.hs
+@@ -59,6 +59,7 @@ import Distribution.Simple.LocalBuildInfo
+ 
+ import qualified Distribution.Simple.GHC as GHC
+ import qualified Distribution.Simple.GHCJS as GHCJS
++import qualified Distribution.Simple.MHS as MHS
+ import qualified Distribution.Simple.PackageIndex as Index
+ import qualified Distribution.Simple.UHC as UHC
+ 
+@@ -243,6 +244,7 @@ registerAll pkg lbi regFlags ipis =
+     writeRegisterScript =
+       case compilerFlavor (compiler lbi) of
+         UHC -> notice verbosity "Registration scripts not needed for uhc"
++        MHS -> notice verbosity "Registration scripts not needed for mhs"
+         _ ->
+           withHcPkg
+             verbosity
+@@ -370,6 +372,7 @@ createPackageDB verbosity comp progdb preferCompat dbPath =
+     GHC -> HcPkg.init (GHC.hcPkgInfo progdb) verbosity preferCompat dbPath
+     GHCJS -> HcPkg.init (GHCJS.hcPkgInfo progdb) verbosity False dbPath
+     UHC -> return ()
++    MHS -> MHS.createPackageDB verbosity dbPath
+     _ -> dieWithException verbosity CreatePackageDB
+ 
+ doesPackageDBExist :: FilePath -> IO Bool
+@@ -434,6 +437,7 @@ registerPackage verbosity comp progdb mbWorkDir packageDbs installedPkgInfo regi
+   case compilerFlavor comp of
+     GHC -> GHC.registerPackage verbosity progdb mbWorkDir packageDbs installedPkgInfo registerOptions
+     GHCJS -> GHCJS.registerPackage verbosity progdb mbWorkDir packageDbs installedPkgInfo registerOptions
++    MHS -> MHS.registerPackage verbosity mbWorkDir comp progdb packageDbs installedPkgInfo
+     _
+       | HcPkg.registerMultiInstance registerOptions ->
+           dieWithException verbosity RegisMultiplePkgNotSupported
+diff --git a/Cabal/src/Distribution/Simple/Setup/Config.hs b/Cabal/src/Distribution/Simple/Setup/Config.hs
+index 67945bd4d..66d345e26 100644
+--- a/Cabal/src/Distribution/Simple/Setup/Config.hs
++++ b/Cabal/src/Distribution/Simple/Setup/Config.hs
+@@ -438,6 +438,7 @@ configureOptions showOrParseArgs =
+             [ (Flag GHC, ("g", ["ghc"]), "compile with GHC")
+             , (Flag GHCJS, ([], ["ghcjs"]), "compile with GHCJS")
+             , (Flag UHC, ([], ["uhc"]), "compile with UHC")
++            , (Flag MHS, ([], ["mhs"]), "compile with MHS")
+             ]
+         )
+     , option
+diff --git a/cabal-install/src/Distribution/Client/CmdPath.hs b/cabal-install/src/Distribution/Client/CmdPath.hs
+index 9beacf732..62b44a03e 100644
+--- a/cabal-install/src/Distribution/Client/CmdPath.hs
++++ b/cabal-install/src/Distribution/Client/CmdPath.hs
+@@ -306,6 +306,7 @@ requireCompilerProg verbosity compiler =
+   case compilerFlavor compiler of
+     GHC -> pure ghcProgram
+     GHCJS -> pure ghcjsProgram
++    MHS -> pure mhsProgram
+     flavour ->
+       die' verbosity $
+         "path: Unsupported compiler flavour: "
+diff --git a/cabal-testsuite/PackageTests/MHS/app/Main.hs b/cabal-testsuite/PackageTests/MHS/app/Main.hs
+new file mode 100644
+index 000000000..c84c6b1a2
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/app/Main.hs
+@@ -0,0 +1,6 @@
++module Main (main) where
++
++import Greeting (greeting)
++
++main :: IO ()
++main = putStrLn greeting
+diff --git a/cabal-testsuite/PackageTests/MHS/cabal.project b/cabal-testsuite/PackageTests/MHS/cabal.project
+new file mode 100644
+index 000000000..3dccaec79
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/cabal.project
+@@ -0,0 +1,3 @@
++packages: .
++compiler: mhs
++with-compiler: mhs
+diff --git a/cabal-testsuite/PackageTests/MHS/cabal.test.hs b/cabal-testsuite/PackageTests/MHS/cabal.test.hs
+new file mode 100644
+index 000000000..4d32477de
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/cabal.test.hs
+@@ -0,0 +1,8 @@
++import Test.Cabal.Prelude
++
++-- Build and run a package with MicroHs, if it is installed.
++main = cabalTest $ do
++    skipUnless "no mhs" =<< isAvailableProgram mhsProgram
++    recordMode DoNotRecord $ do
++        cabal "v2-build" ["all"]
++        cabal' "v2-run" ["mhs-test"] >>= assertOutputContains "Hello from MicroHs"
+diff --git a/cabal-testsuite/PackageTests/MHS/mhs-test.cabal b/cabal-testsuite/PackageTests/MHS/mhs-test.cabal
+new file mode 100644
+index 000000000..71ba6cb62
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/mhs-test.cabal
+@@ -0,0 +1,19 @@
++cabal-version:   3.0
++name:            mhs-test
++version:         1.0
++build-type:      Simple
++license:         BSD-3-Clause
++synopsis:        A package to build with MicroHs
++
++library
++    exposed-modules:  Greeting
++    other-modules:    Greeting.Internal
++    build-depends:    base
++    hs-source-dirs:   src
++    default-language: Haskell2010
++
++executable mhs-test
++    main-is:          Main.hs
++    build-depends:    base, mhs-test
++    hs-source-dirs:   app
++    default-language: Haskell2010
+diff --git a/cabal-testsuite/PackageTests/MHS/src/Greeting.hs b/cabal-testsuite/PackageTests/MHS/src/Greeting.hs
+new file mode 100644
+index 000000000..e8184dc50
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/src/Greeting.hs
+@@ -0,0 +1,6 @@
++module Greeting (greeting) where
++
++import Greeting.Internal (compilerName)
++
++greeting :: String
++greeting = "Hello from " ++ compilerName
+diff --git a/cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs b/cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs
+new file mode 100644
+index 000000000..98c92da6a
+--- /dev/null
++++ b/cabal-testsuite/PackageTests/MHS/src/Greeting/Internal.hs
+@@ -0,0 +1,4 @@
++module Greeting.Internal (compilerName) where
++
++compilerName :: String
++compilerName = "MicroHs"
+diff --git a/changelog.d/pr-11392.md b/changelog.d/pr-11392.md
+new file mode 100644
+index 000000000..710fb5f60
+--- /dev/null
++++ b/changelog.d/pr-11392.md
+@@ -0,0 +1,18 @@
++---
++synopsis: Build packages with MicroHs
++packages: [Cabal, cabal-install]
++prs: 11392
++significance: significant
++---
++
++Cabal and cabal-install can now configure, build, install and register
++packages with MicroHs (`mhs`, https://github.com/augustss/MicroHs), a small
++Haskell compiler. Select it with `compiler: mhs` and `with-compiler: mhs` in
++`cabal.project`, or with `Setup configure --mhs`.
++
++The packages that come with mhs, such as `base`, are found through `mhs -L`.
++The libraries that Cabal builds are compiled into mhs package files, which the
++components depending on them preload, so that each component sees exactly the
++packages it depends on. Only what simple packages need is implemented; there
++is no support for Backpack, foreign libraries, profiling, shared libraries or
++C sources in libraries.
+diff --git a/doc/cabal-package-description-file.rst b/doc/cabal-package-description-file.rst
+index 9ebfe0c93..85c52a249 100644
+--- a/doc/cabal-package-description-file.rst
++++ b/doc/cabal-package-description-file.rst
+@@ -264,7 +264,7 @@ The syntax of the value depends on the field. Field types include:
+ *identifier*
+     A letter followed by zero or more alphanumerics or underscores.
+ *compiler*
+-    A compiler flavor (one of: ``GHC``, ``UHC`` or ``LHC``)
++    A compiler flavor (one of: ``GHC``, ``GHCJS``, ``MHS``, ``UHC`` or ``LHC``)
+     followed by a version range. For example, ``GHC ==6.10.3``, or
+     ``LHC >=0.6 && <0.8``.
+ 
+diff --git a/doc/cabal-project-description-file.rst b/doc/cabal-project-description-file.rst
+index adae4514b..6256be313 100644
+--- a/doc/cabal-project-description-file.rst
++++ b/doc/cabal-project-description-file.rst
+@@ -983,7 +983,7 @@ feature was added.
+     The command line variant of this flag is ``--configure-option=arg``,
+     which can be specified multiple times to pass multiple options.
+ 
+-.. cfg-field:: compiler: ghc, ghcjs, jhc, lhc, or uhc
++.. cfg-field:: compiler: ghc, ghcjs, jhc, lhc, uhc, or mhs
+                --compiler=compiler
+     :synopsis: Compiler to build with.
+ 
+diff --git a/doc/config.rst b/doc/config.rst
+index 00032a459..ed6244338 100644
+--- a/doc/config.rst
++++ b/doc/config.rst
+@@ -357,6 +357,8 @@ The list of known programs is:
+ +-----------------------+------------------------------------------------------------------------------------------------------------------------------------+
+ | ``ld``                | Usually provided by GHC's ``"ld command"`` entry in ``ghc --info``.                                                                |
+ +-----------------------+------------------------------------------------------------------------------------------------------------------------------------+
++| ``mhs``               | `<https://github.com/augustss/MicroHs>`_                                                                                           |
+++-----------------------+------------------------------------------------------------------------------------------------------------------------------------+
+ | ``pkg-config``        |                                                                                                                                    |
+ +-----------------------+------------------------------------------------------------------------------------------------------------------------------------+
+ | ``runghc``            |                                                                                                                                    |
+diff --git a/doc/setup-commands.rst b/doc/setup-commands.rst
+index c7e584084..57fdf8385 100644
+--- a/doc/setup-commands.rst
++++ b/doc/setup-commands.rst
+@@ -169,6 +169,7 @@ files of a package:
+ .. option:: -g, --ghc
+             --ghcjs
+             --uhc
++            --mhs
+             --haskell-suite
+ 
+     Specify which Haskell implementation to use to build the package. At
+@@ -204,7 +205,7 @@ files of a package:
+     programs is as follows:
+     ``alex``, ``ar``, ``c2hs``, ``cpphs``, ``doctest``, ``gcc``, ``ghc``,
+     ``ghc-pkg``, ``ghcjs``, ``ghcjs-pkg``, ``haddock``, ``happy``,
+-    ``hpc``, ``hsc2hs``, ``hscolour``, ``jhc``, ``ld``, ``pkg-config``,
++    ``hpc``, ``hsc2hs``, ``hscolour``, ``jhc``, ``ld``, ``mhs``, ``pkg-config``,
+     ``runghc``, ``strip``, ``tar``, ``uhc``.
+ 
+ .. option:: --PROG-options=OPTS
+-- 
+2.54.0
+

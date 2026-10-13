@@ -1,0 +1,151 @@
+From b507b9e7f2b33ccb2be03dd356da3f990d398d0b Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Mon, 12 Oct 2026 20:17:40 -0400
+Subject: [PATCH 6/7] Compile with the ghc-compat that mhs has installed
+
+ghc-compat holds modules that are part of base in GHC but not in mhs, such
+as GHC.Stack, GHC.Exts and Language.Haskell.TH.Syntax. Packages written for
+GHC import them while depending only on base, so MicroCabal adds ghc-compat
+to the dependencies of every package but base, ghc-compat and the packages
+of MicroHs itself.
+
+Do likewise in Distribution.Simple.MHS, without the solver knowing: if mhs
+has ghc-compat installed in its own package directory, as
+'mcabal install ghc-compat' does, preload it for every component, unless its
+package is one of those or it depends on a ghc-compat itself. See
+Note [MicroHs and ghc-compat], which also says what this means for the
+store.
+
+Measured on the 91 packages of MicroHs's Makefile.packages, the list its
+hackage-ci workflow installs with mcabal, with ghc-compat installed with
+mcabal: 80 build, up from 62. Of the other 11, 5 fail because mhs's hashable
+is presented at version 1.0.0.0, MicroCabal's number, while
+unordered-containers requires hashable >= 1.4, so the solver builds hashable
+from Hackage, which mhs cannot compile; 4 because of upper bounds that mcabal
+ignores (the indexed-traversable fork caps containers below 0.8, and
+QuickCheck from git is 2.19.0.0, which hspec-core excludes); xhtml needs a
+module that mhs's base lacks, and terminfo the curses C library.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/MHS.hs | 72 ++++++++++++++++++++++------
+ changelog.d/pr-11392.md              |  5 +-
+ 2 files changed, 61 insertions(+), 16 deletions(-)
+
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index 9b4b36bf6..0122de8c3 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -109,6 +109,23 @@ loaded. See 'compatPackages'. The unit id of base stays <name>-<version> as
+ mhs knows it, which is also the name of its package file.
+ -}
+ 
++{- Note [MicroHs and ghc-compat]
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++The package ghc-compat holds modules that are part of base in GHC but not in
++mhs, such as GHC.Stack, GHC.Exts and Language.Haskell.TH.Syntax. Packages
++written for GHC import them while depending only on base, so MicroCabal adds
++ghc-compat to the dependencies of every package, except base, ghc-compat and
++the packages of MicroHs itself.
++
++Cabal does likewise, without the solver knowing: if mhs has ghc-compat
++installed in its own package directory, as 'mcabal install ghc-compat' does,
++every component is compiled with it loaded, unless its package is one of
++those, or it depends on a ghc-compat itself. As ghc-compat is not a dependency
++that Cabal knows of, its version is not part of the hash of a package in the
++store: installing another version for the same mhs requires rebuilding the
++packages built with the previous one.
++-}
++
+ -- -----------------------------------------------------------------------------
+ -- Configuring
+ 
+@@ -470,7 +487,7 @@ runMhs verbosity pkg_descr lbi bi clbi args = do
+       mbWorkDir = mbWorkDirLBI lbi
+       progdb = withPrograms lbi
+       u = interpretSymbolicPathCWD -- See Note [Symbolic paths] in Distribution.Utils.Path
+-  pkgFiles <- dependencyPackageFiles verbosity lbi clbi
++  pkgFiles <- dependencyPackageFiles verbosity pkg_descr lbi clbi
+   let commonArgs =
+         verbosityFlags verbosity
+           -- The module search path: the source directories of the component
+@@ -502,23 +519,48 @@ runMhs verbosity pkg_descr lbi bi clbi args = do
+   runDbProgramCwd verbosity mbWorkDir mhsProgram progdb (commonArgs ++ args)
+ 
+ -- | The package files of the dependencies of a component, closed under the
+--- dependencies of the dependencies.
+-dependencyPackageFiles :: Verbosity -> LocalBuildInfo -> ComponentLocalBuildInfo -> IO [FilePath]
+-dependencyPackageFiles verbosity lbi clbi = do
++-- dependencies of the dependencies, with the ghc-compat that mhs has installed
++-- if the component is to be compiled with it. See Note [MicroHs and ghc-compat].
++dependencyPackageFiles
++  :: Verbosity
++  -> PackageDescription
++  -> LocalBuildInfo
++  -> ComponentLocalBuildInfo
++  -> IO [FilePath]
++dependencyPackageFiles verbosity pkg_descr lbi clbi = do
++  let progdb = withPrograms lbi
+   -- Read the package databases again rather than using 'installedPkgs', which
+   -- predates the libraries registered in place since the package was configured.
+-  index <-
+-    getInstalledPackages verbosity (compiler lbi) (mbWorkDirLBI lbi) (withPackageDB lbi) (withPrograms lbi)
++  index <- getInstalledPackages verbosity (compiler lbi) (mbWorkDirLBI lbi) (withPackageDB lbi) progdb
+   let deps = map fst (componentPackageDeps clbi)
+-  closure <- case PackageIndex.dependencyClosure index deps of
+-    Left closure -> return (PackageIndex.allPackages closure)
+-    Right broken ->
+-      dieWithException verbosity $
+-        MhsMissingDependencies $
+-          ordNub $
+-            [dep | dep <- deps, isNothing (PackageIndex.lookupUnitId index dep)]
+-              ++ concatMap snd broken
+-  catMaybes <$> traverse (packageFile verbosity) closure
++  closure <- dependencyClosure index deps
++  ghcCompat <-
++    if packageName pkg_descr `elem` withoutGhcCompat || any isGhcCompat closure
++      then return []
++      else filter isGhcCompat <$> globalPackages verbosity progdb
++  closure' <- dependencyClosure index (deps ++ map IPI.installedUnitId (take 1 ghcCompat))
++  catMaybes <$> traverse (packageFile verbosity) closure'
++  where
++    dependencyClosure index deps = case PackageIndex.dependencyClosure index deps of
++      Left closure -> return (PackageIndex.allPackages closure)
++      Right broken ->
++        dieWithException verbosity $
++          MhsMissingDependencies $
++            ordNub $
++              [dep | dep <- deps, isNothing (PackageIndex.lookupUnitId index dep)]
++                ++ concatMap snd broken
++    isGhcCompat ipi = packageName (IPI.sourcePackageId ipi) == mkPackageName "ghc-compat"
++
++-- | The packages that are not compiled with ghc-compat, as MicroCabal has them:
++-- base and ghc-compat themselves, and those of MicroHs.
++-- See Note [MicroHs and ghc-compat].
++withoutGhcCompat :: [PackageName]
++withoutGhcCompat = map mkPackageName ["base", "ghc-compat", "MicroHs", "MicroCabal", "canvhs"]
++
++-- | The packages that mhs has installed, in its own package directories.
++globalPackages :: Verbosity -> ProgramDb -> IO [InstalledPackageInfo]
++globalPackages verbosity progdb =
++  concat <$> (traverse (readPackageDbDir verbosity progdb) =<< globalPackageDbDirs verbosity progdb)
+ 
+ -- | The macros of @cabal_macros.h@ as @-D@ options of cpphs, to which mhs passes
+ -- on only the @-D@ and @-I@ options it is given, so that it cannot be told to
+diff --git a/changelog.d/pr-11392.md b/changelog.d/pr-11392.md
+index 8413d20ce..b9f79fb22 100644
+--- a/changelog.d/pr-11392.md
++++ b/changelog.d/pr-11392.md
+@@ -27,4 +27,7 @@ Since mhs ignores the `LANGUAGE` pragmas of the extensions it does not
+ implement, packages are not rejected for the extensions they declare, and
+ `reexported-modules` are accepted, as mhs sees all the modules of the
+ packages it loads. The macros of `cabal_macros.h`, such as `MIN_VERSION_base`,
+-are passed to mhs as `-D` options of its preprocessor.
++are passed to mhs as `-D` options of its preprocessor. If mhs has `ghc-compat`
++installed, as `mcabal install ghc-compat` does, every component is compiled
++with it, as MicroCabal does: it holds modules that are part of `base` in GHC,
++such as `GHC.Stack`.
+-- 
+2.54.0
+

@@ -1,0 +1,185 @@
+From c46634ab0fbb56049e4d44854bcc559a84922059 Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Mon, 12 Oct 2026 18:35:26 -0400
+Subject: [PATCH 3/7] Accept every extension and re-exported modules with mhs
+
+mhs has the extensions it implements always on, CPP excepted, and ignores
+the LANGUAGE pragmas of the others. Describing only the extensions it
+implements made Cabal reject packages for extensions they merely declare,
+often for the GHC side of a conditional: Trustworthy (parsec), DeriveGeneric
+(pretty), UnboxedTuples (unordered-containers, vault), UnliftedFFITypes
+(psqueues, these), TypeFamilies (newtype, contravariant, assoc), or
+NoGeneralizedNewtypeDeriving, for which the solver fell back from time-1.15,
+which supports mhs, to time-1.12.2. Describe every extension as supported,
+as MicroCabal effectively does by not checking them: a package that needs an
+extension mhs lacks fails when mhs meets the syntax.
+
+mhs sees all the modules of the packages it loads, which include the
+dependencies of the dependencies of a component, so the modules a package
+re-exports are visible to the components depending on it, as long as they
+are not renamed. Configure no longer rejects packages with
+reexported-modules, such as ansi-terminal, with mhs.
+
+Measured by building, one at a time with cabal and mhs 0.16.9.0, the 91
+packages of MicroHs's Makefile.packages, the list its hackage-ci workflow
+installs with mcabal: 39 built before, 42 after, and the solver rejects none
+of them anymore. Of the other 49, 36 fail on the missing version macros
+(transformers alone blocks 23) and 11 on the implicit ghc-compat dependency
+that mcabal adds to every package.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/Compiler.hs |  8 +-
+ Cabal/src/Distribution/Simple/MHS.hs      | 96 +++--------------------
+ changelog.d/pr-11392.md                   |  5 ++
+ 3 files changed, 21 insertions(+), 88 deletions(-)
+
+diff --git a/Cabal/src/Distribution/Simple/Compiler.hs b/Cabal/src/Distribution/Simple/Compiler.hs
+index 3a0aa4c91..79ef56cda 100644
+--- a/Cabal/src/Distribution/Simple/Compiler.hs
++++ b/Cabal/src/Distribution/Simple/Compiler.hs
+@@ -448,8 +448,14 @@ parmakeSupported :: Compiler -> Bool
+ parmakeSupported = ghcSupported "Support parallel --make"
+ 
+ -- | Does this compiler support reexported-modules?
++--
++-- MicroHs sees all the modules of the packages it loads, which include the
++-- dependencies of the packages a component depends on, so the modules that a
++-- package re-exports are visible to the components depending on it, as long
++-- as they are not renamed.
+ reexportedModulesSupported :: Compiler -> Bool
+-reexportedModulesSupported = ghcSupported "Support reexported-modules"
++reexportedModulesSupported comp =
++  compilerFlavor comp == MHS || ghcSupported "Support reexported-modules" comp
+ 
+ -- | Does this compiler support thinning/renaming on package flags?
+ renamingPackageFlagsSupported :: Compiler -> Bool
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index 71e00699b..f73e7ebef 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -141,98 +141,20 @@ configure verbosity hcPath progdb = do
+ mhsLanguages :: [(Language, CompilerFlag)]
+ mhsLanguages = [(lang, "") | lang <- knownLanguages]
+ 
+--- | The extensions that MicroHs supports. They are always enabled, except for
+--- CPP. See <https://github.com/augustss/MicroHs/wiki/Language>.
++-- | The extensions that MicroHs accepts: all of them. The extensions that mhs
++-- implements are always on, except for CPP, and it ignores the LANGUAGE
++-- pragmas of the others, so a package is not rejected for the extensions it
++-- declares, which are often used only on the GHC side of a conditional. A
++-- package that does need an extension that mhs does not implement fails when
++-- mhs meets the syntax. The extensions that mhs implements are listed at
++-- <https://github.com/augustss/MicroHs/wiki/Language>.
+ mhsLanguageExtensions :: [(Extension, Maybe CompilerFlag)]
+ mhsLanguageExtensions =
+   (EnableExtension CPP, Just "-XCPP")
+-    : [(EnableExtension ext, Nothing) | ext <- alwaysOn]
+-    ++ [(DisableExtension ext, Nothing) | ext <- alwaysOff]
++    : [(EnableExtension ext, Nothing) | ext <- knownExtensions, ext /= CPP]
++    ++ [(DisableExtension ext, Nothing) | ext <- knownExtensions]
+     ++ [(UnknownExtension ext, Nothing) | ext <- mhsSpecific]
+   where
+-    alwaysOn =
+-      [ AllowAmbiguousTypes
+-      , BangPatterns
+-      , BinaryLiterals
+-      , BlockArguments
+-      , CApiFFI
+-      , ConstrainedClassMethods
+-      , ConstraintKinds
+-      , DefaultSignatures
+-      , DeriveAnyClass
+-      , DeriveDataTypeable
+-      , DeriveFoldable
+-      , DeriveFunctor
+-      , DeriveTraversable
+-      , DerivingStrategies
+-      , DerivingVia
+-      , DisambiguateRecordFields
+-      , DoAndIfThenElse
+-      , DuplicateRecordFields
+-      , EmptyCase
+-      , EmptyDataDecls
+-      , EmptyDataDeriving
+-      , ExistentialQuantification
+-      , ExplicitForAll
+-      , ExplicitNamespaces
+-      , ExtendedDefaultRules
+-      , FlexibleContexts
+-      , FlexibleInstances
+-      , ForeignFunctionInterface
+-      , FunctionalDependencies
+-      , GADTs
+-      , GADTSyntax
+-      , GeneralisedNewtypeDeriving
+-      , GeneralizedNewtypeDeriving
+-      , ImplicitPrelude
+-      , ImportQualifiedPost
+-      , IncoherentInstances
+-      , InstanceSigs
+-      , KindSignatures
+-      , LambdaCase
+-      , LiberalTypeSynonyms
+-      , MagicHash
+-      , MonomorphismRestriction
+-      , MultilineStrings
+-      , MultiParamTypeClasses
+-      , MultiWayIf
+-      , NamedDefaults
+-      , NamedFieldPuns
+-      , NegativeLiterals
+-      , NondecreasingIndentation
+-      , NumericUnderscores
+-      , OrPatterns
+-      , OverlappingInstances
+-      , OverloadedRecordDot
+-      , OverloadedRecordUpdate
+-      , OverloadedStrings
+-      , PatternGuards
+-      , PatternSynonyms
+-      , PolyKinds
+-      , PolymorphicComponents
+-      , PostfixOperators
+-      , QualifiedDo
+-      , Rank2Types
+-      , RankNTypes
+-      , RecordWildCards
+-      , RecursiveDo
+-      , RelaxedPolyRec
+-      , RequiredTypeArguments
+-      , ScopedTypeVariables
+-      , StandaloneDeriving
+-      , StandaloneKindSignatures
+-      , TraditionalRecordSyntax
+-      , TupleSections
+-      , TypeApplications
+-      , TypeOperators
+-      , TypeSynonymInstances
+-      , UndecidableInstances
+-      , UndecidableSuperClasses
+-      , UnicodeSyntax
+-      , ViewPatterns
+-      ]
+-    -- NoDatatypeContexts and NoStarIsType
+-    alwaysOff = [DatatypeContexts, StarIsType]
+     -- Extensions of MicroHs that GHC does not have.
+     mhsSpecific = ["ExtraInstanceBindings", "ImportShadowing", "TypeLits"]
+ 
+diff --git a/changelog.d/pr-11392.md b/changelog.d/pr-11392.md
+index 9669a88fb..c26959c72 100644
+--- a/changelog.d/pr-11392.md
++++ b/changelog.d/pr-11392.md
+@@ -22,3 +22,8 @@ The `base` of mhs is versioned like mhs itself and bundles the modules of
+ `integer-logarithms`. So that packages written for GHC solve, Cabal presents it
+ as `base-4.19.1.0` and the bundled packages as installed packages of their
+ own, at the versions MicroCabal uses for the same purpose.
++
++Since mhs ignores the `LANGUAGE` pragmas of the extensions it does not
++implement, packages are not rejected for the extensions they declare, and
++`reexported-modules` are accepted, as mhs sees all the modules of the
++packages it loads.
+-- 
+2.54.0
+

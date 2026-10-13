@@ -1,0 +1,134 @@
+name: replay
+
+# Build cabal with the support for MicroHs, then the packages of MicroHs's
+# Makefile.packages with it. See README.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      cabal-repository:
+        description: The GitHub repository of cabal to build
+        default: haskell/cabal
+      cabal-ref:
+        description: The commit or branch of cabal to build
+        default: 1f2da2dce875050e1ea9bc0b37972732094125d9
+      apply-patches:
+        description: Apply the patches of this repository to cabal
+        type: boolean
+        default: true
+      microhs-ref:
+        description: The tag or commit of MicroHs
+        default: v0.16.9.0
+
+env:
+  CABAL_REPOSITORY: ${{ inputs.cabal-repository || 'haskell/cabal' }}
+  # The head of https://github.com/haskell/cabal/pull/11392 when the patches
+  # were made.
+  CABAL_REF: ${{ inputs.cabal-ref || '1f2da2dce875050e1ea9bc0b37972732094125d9' }}
+  APPLY_PATCHES: ${{ github.event_name != 'workflow_dispatch' || inputs.apply-patches }}
+  MICROHS_REF: ${{ inputs.microhs-ref || 'v0.16.9.0' }}
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install curses, which terminfo needs
+        run: sudo apt-get update && sudo apt-get install -y libncurses-dev
+
+      - uses: haskell-actions/setup@v2
+        id: setup
+        with:
+          ghc-version: '9.10'
+          cabal-version: latest
+
+      - name: Check out cabal
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CABAL_REPOSITORY }}
+          ref: ${{ env.CABAL_REF }}
+          path: cabal
+
+      - name: Apply the patches
+        if: env.APPLY_PATCHES == 'true'
+        working-directory: cabal
+        run: git -c user.name=CI -c user.email=ci@example.invalid am ../patches/*.patch
+
+      - name: Restore the cabal store
+        uses: actions/cache/restore@v4
+        id: store
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: store-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('cabal/cabal.project', 'cabal/**/*.cabal') }}
+          restore-keys: store-${{ runner.os }}-ghc-${{ steps.setup.outputs.ghc-version }}-
+
+      - name: Build cabal
+        working-directory: cabal
+        run: |
+          cabal update
+          cabal build cabal-install:exe:cabal cabal-testsuite:exe:cabal-tests
+          cp "$(cabal list-bin cabal-install:exe:cabal)" "$HOME/cabal-mhs"
+          "$HOME/cabal-mhs" --version
+
+      - name: Save the cabal store
+        if: steps.store.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.setup.outputs.cabal-store }}
+          key: ${{ steps.store.outputs.cache-primary-key }}
+
+      - name: Check out MicroHs
+        uses: actions/checkout@v4
+        with:
+          repository: augustss/MicroHs
+          ref: ${{ env.MICROHS_REF }}
+          path: microhs
+
+      - name: Restore MicroHs
+        uses: actions/cache@v4
+        id: microhs
+        with:
+          path: ~/.mcabal
+          key: microhs-${{ runner.os }}-${{ env.MICROHS_REF }}-ghc-compat
+
+      - name: Build and install MicroHs, and ghc-compat
+        run: |
+          echo "$HOME/.mcabal/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.mcabal/bin:$PATH"
+          if [ "${{ steps.microhs.outputs.cache-hit }}" != true ]; then
+            make -C microhs minstall
+            mcabal install ghc-compat
+          fi
+          mhs --version
+          mhs -L
+
+      - name: Run the tests of cabal for mhs
+        working-directory: cabal
+        run: >
+          cabal run cabal-testsuite:exe:cabal-tests --
+          --with-cabal="$HOME/cabal-mhs"
+          cabal-testsuite/PackageTests/MHS/Build/cabal.test.hs
+          cabal-testsuite/PackageTests/MHS/Macros/cabal.test.hs
+
+      - name: Replay MicroHs's package list
+        if: ${{ !cancelled() }}
+        run: python3 replay.py --cabal "$HOME/cabal-mhs" --makefile microhs/Makefile.packages --work work
+
+      - name: Summarize the replay
+        if: ${{ !cancelled() && hashFiles('work/results.json') != '' }}
+        run: python3 classify.py --work work >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the results of the replay
+        if: ${{ !cancelled() && hashFiles('work/results.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay
+          path: |
+            work/results.json
+            work/summary.md
+            work/logs
