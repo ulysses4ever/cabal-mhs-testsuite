@@ -1,7 +1,7 @@
-From 1ea02d3a0d6310f1abf6c3915ba5bfb79c4c6899 Mon Sep 17 00:00:00 2001
+From 98e0c98f426359a00369c325858dcd1bcba89a80 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 20:31:31 -0400
-Subject: [PATCH 7/8] Present the hashable of mhs at version 1.4.7.0
+Subject: [PATCH 6/7] Present the hashable of mhs at version 1.4.7.0
 
 MicroCabal has the hashable bundled in the base of mhs at 1.0.0.0, "very
 rudimentary", which makes no difference to it, as it does not check bounds.
@@ -19,10 +19,10 @@ Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
  1 file changed, 7 insertions(+), 2 deletions(-)
 
 diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
-index 0122de8c3..e2fe47f21 100644
+index 9b4b36bf6..1b01b4619 100644
 --- a/Cabal/src/Distribution/Simple/MHS.hs
 +++ b/Cabal/src/Distribution/Simple/MHS.hs
-@@ -351,7 +351,12 @@ parseFields = go . lines
+@@ -334,7 +334,12 @@ parseFields = go . lines
  --
  -- The versions are those that MicroCabal uses for the same purpose; in its
  -- words, "the version numbers are totally fake; they are from GHC". They say
@@ -36,7 +36,7 @@ index 0122de8c3..e2fe47f21 100644
  baseCompatVersion :: Version
  baseCompatVersion = mkVersion [4, 19, 1, 0]
  
-@@ -360,7 +365,7 @@ bundledPackages =
+@@ -343,7 +348,7 @@ bundledPackages =
    [ ("bytestring", [0, 12, 1, 0], ["Data.ByteString"])
    , ("deepseq", [1, 4, 4, 0], ["Control.DeepSeq"])
    , ("directory", [1, 3, 8, 1], ["System.Directory"])

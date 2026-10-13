@@ -96,17 +96,14 @@ jobs:
         id: microhs
         with:
           path: ~/.mcabal
-          key: microhs-${{ runner.os }}-${{ env.MICROHS_REF }}-ghc-compat-array-random
+          key: microhs-${{ runner.os }}-${{ env.MICROHS_REF }}
 
-      - name: Build and install MicroHs, and ghc-compat, array-mhs and random-mhs
+      - name: Build and install MicroHs
         run: |
           echo "$HOME/.mcabal/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.mcabal/bin:$PATH"
           if [ "${{ steps.microhs.outputs.cache-hit }}" != true ]; then
             make -C microhs minstall
-            mcabal install ghc-compat
-            mcabal install array
-            mcabal -r install random
           fi
           mhs --version
           mhs -L

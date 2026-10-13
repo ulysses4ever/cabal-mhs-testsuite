@@ -11,10 +11,9 @@ MicroHs's [`Makefile.packages`](https://github.com/augustss/MicroHs/blob/master/
 Where mcabal behaves differently from cabal, the replay does what mcabal does:
 
 * The `--git` overrides of the Makefile become `source-repository-package` stanzas, kept in the projects of the later steps once the package builds.
-* mcabal uses the forks `array-mhs` and `random-mhs` wherever a package depends on `array` or `random`. With the PR, cabal does the same with the forks that mhs has installed, so the replay installs them with `mcabal install array` and `mcabal -r install random`. `random-mhs` depends on `mtl`, `transformers`, `splitmix` and `time`, which `-r` installs for mhs too; the solver then takes them as installed packages, as it takes the boot packages of GHC.
 * mcabal ignores version bounds. [`project.extra`](project.extra), which is added to the project of every step, lifts the few bounds that stand between a package of the list and the versions of its dependencies that support mhs, and says why for each.
 * mhs sees every package that mcabal has installed, and `hspec-core` relies on that: it imports `async` without depending on it, as it compiles its vendored copy of `async` only for GHC. The replay adds `if impl(mhs)` / `build-depends: async` to a copy of `hspec-core` (`PATCHED` in `replay.py`), which is the fix that belongs upstream.
-* mcabal adds `ghc-compat` to the dependencies of every package. With the PR, cabal does the same with the `ghc-compat` that mhs has installed, so the replay installs it with `mcabal install ghc-compat`.
+* mcabal adds `ghc-compat` to the dependencies of every package, and uses the forks `array-mhs` and `random-mhs` wherever a package depends on `array` or `random`. With the PR, cabal rewrites the packages the same way before solving, so it builds `ghc-compat` and the forks from Hackage like any other dependency, and mhs needs nothing installed besides what `make minstall` installs.
 
 The packages come from Hackage as it was at the `index-state` set in `replay.py`, so that every run chooses the same versions.
 
@@ -35,19 +34,17 @@ While the patches were written, the replay of the 91 packages measured each step
 | patches 1 and 2: building with mhs, `base` and its bundled packages at their Hackage versions | 39 |
 | patch 3: every extension and `reexported-modules` accepted | 42 |
 | patch 4: the version macros of `cabal_macros.h` | 62 |
-| patches 5 and 6: what is specific to mhs kept in `Distribution.Simple.MHS`, and `ghc-compat` | 80 |
-| patch 7, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([first CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
-| patch 8, the forks of `array` and `random` that mhs has installed, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
+| patch 5: what is specific to mhs kept in `Distribution.Simple.MHS`, and `ghc-compat` installed with mcabal (an earlier version of patch 7) | 80 |
+| patch 6, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
+| the forks of `array` and `random` installed with mcabal, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
+| patch 7: packages rewritten for mhs before solving, so that `ghc-compat` and the forks come from Hackage and mhs needs nothing installed | running |
 
 ## Running it locally
 
 ```
-# MicroHs from source, with ghc-compat; ~/.mcabal/bin must be on the PATH
+# MicroHs from source; ~/.mcabal/bin must be on the PATH
 git clone --branch v0.16.9.0 https://github.com/augustss/MicroHs
 make -C MicroHs minstall
-mcabal install ghc-compat
-mcabal install array
-mcabal -r install random
 
 # cabal with the patches
 git clone https://github.com/haskell/cabal

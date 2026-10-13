@@ -11,10 +11,10 @@ What mcabal does differently is mimicked:
 
 * The --git overrides of the Makefile become source-repository-package
   stanzas, kept in the projects of the later steps once the package builds.
-* mcabal uses the forks array-mhs and random-mhs wherever a package depends
-  on array or random. cabal does the same with the forks that mhs has
-  installed: install them with 'mcabal install array' and
-  'mcabal -r install random' first.
+* mcabal adds ghc-compat to the dependencies of every package, and uses the
+  forks array-mhs and random-mhs wherever a package depends on array or
+  random. With the patches, cabal does the same, so mhs needs nothing
+  installed besides what 'make minstall' installs.
 * mcabal ignores version bounds, so project.extra lifts the few bounds that
   stand between a package and the versions of its dependencies that support
   mhs.
@@ -22,11 +22,6 @@ What mcabal does differently is mimicked:
   that: it imports the async package without depending on it. PATCHED below
   adds the missing dependency to a copy of hspec-core, which is a local
   package of the projects from its own step on.
-* mcabal adds ghc-compat to the dependencies of every package. cabal does the
-  same with the ghc-compat that mhs has installed: install it with
-  'mcabal install ghc-compat' first.
-
-So: mcabal install ghc-compat; mcabal install array; mcabal -r install random
 
 Usage: replay.py --cabal CABAL --makefile MicroHs/Makefile.packages --work DIR
 mhs must be on the PATH.
