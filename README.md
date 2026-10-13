@@ -56,8 +56,17 @@ printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\nallow-boot-library-insta
 cabal build                    # base-0.16.9.0.pkg
 cd ..
 printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\n' > cabal.project
-cabal build exe:mhs            # the compiler, in about a minute
+cabal build exe:mhs            # the compiler
 ```
+
+cabal is no slower than the usual way. Measured once each, with the same mhs, from clean trees:
+
+| Build | Usual way | Time | cabal | Time |
+|---|---|---|---|---|
+| `base` | `mcabal build` in `lib` | 68 s | `cabal build` in `lib` | 69 s |
+| the compiler | the Makefile's `mhs -z -i -imhs -isrc -ilib MicroHs.Main` | 68 s | `cabal build exe:mhs` | 39 s |
+
+The Makefile's command compiles the sources of `base` again, with `-ilib`, while cabal compiles the compiler against the installed `base`, as mhs run directly would, in 38 s. cabal does not pass `-z`, which compresses the combinator code, so its `mhs` is twice the size. With `package MicroHs` and `mhs-options: -z` in `cabal.project`, it does, and builds an `mhs` of the same size as the Makefile's in 34 s.
 
 The `base` that cabal builds has the same modules as the one that MicroHs ships, as `mhs -L` describes them. An installation of mhs whose `base` and compiler are those that cabal built passes the tests of `cabal-testsuite/PackageTests/MHS`, and the replay with it builds and runs all 91 packages ([local run](results/2026-10-13-local-self-built/summary.md)). CI builds both and compiles a program with them ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38427367498)). `cabal install exe:mhs` does not give a working mhs, which looks for its packages and runtime only beside its binary (item 15 of the inventory).
 
