@@ -11,14 +11,22 @@ What mcabal does differently is mimicked:
 
 * The --git overrides of the Makefile become source-repository-package
   stanzas, kept in the projects of the later steps once the package builds.
-* mcabal renames array and random to array-mhs and random-mhs, so copies of
-  array-mhs and random-mhs, renamed back, are local packages of every project.
+* mcabal uses the forks array-mhs and random-mhs wherever a package depends
+  on array or random. cabal does the same with the forks that mhs has
+  installed: install them with 'mcabal install array' and
+  'mcabal -r install random' first.
 * mcabal ignores version bounds, so project.extra lifts the few bounds that
   stand between a package and the versions of its dependencies that support
   mhs.
+* mhs sees every package that mcabal has installed, and hspec-core relies on
+  that: it imports the async package without depending on it. PATCHED below
+  adds the missing dependency to a copy of hspec-core, which is a local
+  package of the projects from its own step on.
 * mcabal adds ghc-compat to the dependencies of every package. cabal does the
   same with the ghc-compat that mhs has installed: install it with
   'mcabal install ghc-compat' first.
+
+So: mcabal install ghc-compat; mcabal install array; mcabal -r install random
 
 Usage: replay.py --cabal CABAL --makefile MicroHs/Makefile.packages --work DIR
 mhs must be on the PATH.
@@ -39,11 +47,23 @@ HERE = pathlib.Path(__file__).resolve().parent
 # machines and days choose the same versions.
 INDEX_STATE = "2026-07-16T00:00:00Z"
 
-# The packages that mcabal replaces with a fork for mhs, and the fork.
-OVERRIDES = {"array": "array-mhs-0.5.8.0", "random": "random-mhs-1.3.2.2"}
-
 # The packages of the list that have no library, only executables.
 EXE_ONLY = {"hspec-discover"}
+
+
+def add_async_for_mhs(text):
+    """hspec-core imports Control.Concurrent.Async, whose source it vendors but
+    compiles only for GHC: with mhs, it needs the async package."""
+    ghc_only = "  if impl(ghc)\n    other-modules:\n        Control.Concurrent.Async\n"
+    if ghc_only not in text:
+        sys.exit("hspec-core.cabal has changed, see add_async_for_mhs")
+    return text.replace(ghc_only, "  if impl(mhs)\n    build-depends: async\n" + ghc_only, 1)
+
+
+# Packages whose description lacks something that mcabal does not need, with
+# the version to patch and the patch. A patched copy is a local package of the
+# projects from the step of the package on.
+PATCHED = {"hspec-core": ("hspec-core-2.11.17", add_async_for_mhs)}
 
 TIMEOUT = 1800
 
@@ -75,29 +95,26 @@ def parse(makefile):
     return entries
 
 
-def prepare_overrides(cabal, work):
-    """Copies of the forks of OVERRIDES, renamed back to the original names."""
-    for name, pkgid in OVERRIDES.items():
-        dest = work / "overrides" / name
-        if dest.exists():
-            continue
-        tmp = work / "overrides" / ".get"
-        shutil.rmtree(tmp, ignore_errors=True)
-        tmp.mkdir(parents=True)
-        subprocess.run([cabal, "get", pkgid, "--destdir=" + str(tmp)], check=True)
-        src = tmp / pkgid
-        fork = pkgid.rsplit("-", 1)[0]
-        text = (src / (fork + ".cabal")).read_text()
-        text = re.sub(r"^(name:\s*)" + re.escape(fork) + r"\s*$", r"\g<1>" + name, text, count=1, flags=re.M)
-        (src / (fork + ".cabal")).unlink()
-        (src / (name + ".cabal")).write_text(text)
-        src.rename(dest)
-        shutil.rmtree(tmp)
+
+def prepare_patched(cabal, work, pkg):
+    """A copy of the package, with the patch of PATCHED applied."""
+    pkgid, patch = PATCHED[pkg]
+    dest = work / "patched" / pkg
+    if dest.exists():
+        return
+    tmp = work / "patched" / ".get"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    subprocess.run([cabal, "get", pkgid, "--destdir=" + str(tmp)], check=True)
+    cabal_file = tmp / pkgid / (pkg + ".cabal")
+    cabal_file.write_text(patch(cabal_file.read_text()))
+    (tmp / pkgid).rename(dest)
+    shutil.rmtree(tmp)
 
 
-def project_file(git_entries, extra):
+def project_file(git_entries, patched, extra):
     lines = [
-        "packages: corpus " + " ".join("overrides/" + name for name in OVERRIDES),
+        "packages: corpus" + "".join(" patched/" + pkg for pkg in patched),
         "compiler: mhs",
         "with-compiler: mhs",
         "index-state: " + INDEX_STATE,
@@ -169,21 +186,24 @@ def main():
     (work / "logs").mkdir(parents=True, exist_ok=True)
     (work / "corpus").mkdir(exist_ok=True)
     (work / "corpus" / "Main.hs").write_text("module Main (main) where\n\nmain :: IO ()\nmain = return ()\n")
-    prepare_overrides(cabal, work)
     results_file = work / "results.json"
     results = json.loads(results_file.read_text()) if results_file.exists() else {"packages": {}}
     results["inputs"] = inputs(cabal, makefile)
     packages = results["packages"]
 
     git_entries = []
+    patched = []
     for i, e in enumerate(entries):
         pkg = e["pkg"]
+        if pkg in PATCHED:
+            prepare_patched(cabal, work, pkg)
+            patched.append(pkg)
         if i < args.first or i > last:
             if e["git"] and packages.get(pkg, {}).get("status") == "ok":
                 git_entries.append(e)
             continue
         step_git = git_entries + ([e] if e["git"] else [])
-        (work / "cabal.project").write_text(project_file(step_git, extra))
+        (work / "cabal.project").write_text(project_file(step_git, patched, extra))
         (work / "corpus" / "corpus.cabal").write_text(corpus_cabal(pkg))
         start = time.time()
         try:

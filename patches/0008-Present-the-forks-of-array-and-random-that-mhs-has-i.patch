@@ -1,0 +1,77 @@
+From 130acdd075258c2079126bd14da4c3876bc9986f Mon Sep 17 00:00:00 2001
+From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
+Date: Mon, 12 Oct 2026 21:00:48 -0400
+Subject: [PATCH 8/8] Present the forks of array and random that mhs has
+ installed as the originals
+
+mhs cannot compile array and random from Hackage, and MicroHs has forks of
+them on Hackage that it can: array-mhs and random-mhs. MicroCabal uses the
+fork wherever a package depends on the original. Do likewise in
+Distribution.Simple.MHS: a fork that mhs has installed in its own package
+directory, as 'mcabal install array random' does, is presented as the
+package it forks, at its own version, so that the solver takes it for the
+original. Its unit id stays the one mhs knows it by, which is also the name
+of its package file. See Note [MicroHs forks of packages].
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0176vAefrw8jPKXdh9h1wKuj
+---
+ Cabal/src/Distribution/Simple/MHS.hs | 28 +++++++++++++++++++++++++---
+ 1 file changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/Cabal/src/Distribution/Simple/MHS.hs b/Cabal/src/Distribution/Simple/MHS.hs
+index e2fe47f21..06baa8a3b 100644
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -126,6 +126,17 @@ store: installing another version for the same mhs requires rebuilding the
+ packages built with the previous one.
+ -}
+ 
++{- Note [MicroHs forks of packages]
++~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++mhs cannot compile some packages from Hackage, and MicroHs has forks of them
++on Hackage that it can: array-mhs and random-mhs. MicroCabal uses the fork
++wherever a package depends on the original. Cabal does likewise: a fork that
++mhs has installed in its own package directory, as 'mcabal install array'
++does, is presented as the package it forks, at its own version, so that the
++solver takes it for the original. Its unit id stays the one mhs knows it by,
++array-mhs-0.5.8.0 say, which is also the name of its package file.
++-}
++
+ -- -----------------------------------------------------------------------------
+ -- Configuring
+ 
+@@ -321,9 +332,12 @@ describePackageFile verbosity progdb pkgFile = do
+                   , IPI.ldOptions = field "linker opts"
+                   }
+           return $
+-            if pname == mkPackageName "base" && libname == LMainLibName
+-              then compatPackages pkg
+-              else [pkg]
++            case lookup pname forkedPackages of
++              _ | pname == mkPackageName "base" && libname == LMainLibName -> compatPackages pkg
++              Just original
++                | libname == LMainLibName ->
++                    [pkg{IPI.sourcePackageId = PackageIdentifier original version}]
++              _ -> [pkg]
+     _ -> do
+       warn verbosity $
+         "Ignoring the MicroHs package file " ++ pkgFile ++ ", which mhs cannot describe."
+@@ -345,6 +359,14 @@ parseFields = go . lines
+     isIndented (c : _) = isSpace c
+     isIndented [] = False
+ 
++-- | The forks of packages from Hackage for mhs, with the packages they fork.
++-- See Note [MicroHs forks of packages].
++forkedPackages :: [(PackageName, PackageName)]
++forkedPackages =
++  [ (mkPackageName "array-mhs", mkPackageName "array")
++  , (mkPackageName "random-mhs", mkPackageName "random")
++  ]
++
+ -- | The version at which the base of mhs is presented, and the packages of
+ -- Hackage whose modules it bundles, with the version at which each is
+ -- presented and the modules (given by prefix) that are theirs.
+-- 
+2.54.0
+

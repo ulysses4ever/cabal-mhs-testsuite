@@ -1,7 +1,7 @@
 From b507b9e7f2b33ccb2be03dd356da3f990d398d0b Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 20:17:40 -0400
-Subject: [PATCH 6/7] Compile with the ghc-compat that mhs has installed
+Subject: [PATCH 6/8] Compile with the ghc-compat that mhs has installed
 
 ghc-compat holds modules that are part of base in GHC but not in mhs, such
 as GHC.Stack, GHC.Exts and Language.Haskell.TH.Syntax. Packages written for

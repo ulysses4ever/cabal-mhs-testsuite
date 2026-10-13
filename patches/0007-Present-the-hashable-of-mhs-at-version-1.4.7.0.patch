@@ -1,7 +1,7 @@
 From 1ea02d3a0d6310f1abf6c3915ba5bfb79c4c6899 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 20:31:31 -0400
-Subject: [PATCH 7/7] Present the hashable of mhs at version 1.4.7.0
+Subject: [PATCH 7/8] Present the hashable of mhs at version 1.4.7.0
 
 MicroCabal has the hashable bundled in the base of mhs at 1.0.0.0, "very
 rudimentary", which makes no difference to it, as it does not check bounds.

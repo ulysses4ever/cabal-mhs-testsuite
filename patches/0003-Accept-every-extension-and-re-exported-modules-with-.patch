@@ -1,7 +1,7 @@
 From c46634ab0fbb56049e4d44854bcc559a84922059 Mon Sep 17 00:00:00 2001
 From: Artem Pelenitsyn <a.pelenitsyn@gmail.com>
 Date: Mon, 12 Oct 2026 18:35:26 -0400
-Subject: [PATCH 3/7] Accept every extension and re-exported modules with mhs
+Subject: [PATCH 3/8] Accept every extension and re-exported modules with mhs
 
 mhs has the extensions it implements always on, CPP excepted, and ignores
 the LANGUAGE pragmas of the others. Describing only the extensions it

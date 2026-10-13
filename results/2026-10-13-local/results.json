@@ -1,0 +1,661 @@
+{
+ "packages": {
+  "ghc-compat": {
+   "index": 0,
+   "status": "ok",
+   "failed": [],
+   "seconds": 11,
+   "git": false
+  },
+  "colour": {
+   "index": 1,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "ansi-terminal-types": {
+   "index": 2,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "ansi-terminal": {
+   "index": 3,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "array": {
+   "index": 4,
+   "status": "ok",
+   "failed": [],
+   "seconds": 12,
+   "git": false
+  },
+  "unordered-containers": {
+   "index": 5,
+   "status": "ok",
+   "failed": [],
+   "seconds": 22,
+   "git": false
+  },
+  "async": {
+   "index": 6,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "call-stack": {
+   "index": 7,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": true
+  },
+  "containers": {
+   "index": 8,
+   "status": "ok",
+   "failed": [],
+   "seconds": 45,
+   "git": false
+  },
+  "time": {
+   "index": 9,
+   "status": "ok",
+   "failed": [],
+   "seconds": 11,
+   "git": false
+  },
+  "polyparse": {
+   "index": 10,
+   "status": "ok",
+   "failed": [],
+   "seconds": 18,
+   "git": false
+  },
+  "cpphs": {
+   "index": 11,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "transformers": {
+   "index": 12,
+   "status": "ok",
+   "failed": [],
+   "seconds": 12,
+   "git": false
+  },
+  "mtl": {
+   "index": 13,
+   "status": "ok",
+   "failed": [],
+   "seconds": 12,
+   "git": false
+  },
+  "exceptions": {
+   "index": 14,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "os-string": {
+   "index": 15,
+   "status": "ok",
+   "failed": [],
+   "seconds": 22,
+   "git": false
+  },
+  "filepath": {
+   "index": 16,
+   "status": "ok",
+   "failed": [],
+   "seconds": 22,
+   "git": false
+  },
+  "granite": {
+   "index": 17,
+   "status": "ok",
+   "failed": [],
+   "seconds": 30,
+   "git": false
+  },
+  "haskell-lexer": {
+   "index": 18,
+   "status": "ok",
+   "failed": [],
+   "seconds": 24,
+   "git": false
+  },
+  "HUnit": {
+   "index": 19,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "hspec-expectations": {
+   "index": 20,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "monad-loops": {
+   "index": 21,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "nanospec": {
+   "index": 22,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "parsec": {
+   "index": 23,
+   "status": "ok",
+   "failed": [],
+   "seconds": 21,
+   "git": false
+  },
+  "pretty": {
+   "index": 24,
+   "status": "ok",
+   "failed": [],
+   "seconds": 18,
+   "git": true
+  },
+  "prettyprinter": {
+   "index": 25,
+   "status": "ok",
+   "failed": [],
+   "seconds": 20,
+   "git": true
+  },
+  "prettyprinter-ansi-terminal": {
+   "index": 26,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": true
+  },
+  "prettyprinter-compat-annotated-wl-pprint": {
+   "index": 27,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": true
+  },
+  "prettyprinter-compat-ansi-wl-pprint": {
+   "index": 28,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": true
+  },
+  "prettyprinter-compat-wl-pprint": {
+   "index": 29,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": true
+  },
+  "splitmix": {
+   "index": 30,
+   "status": "ok",
+   "failed": [],
+   "seconds": 11,
+   "git": false
+  },
+  "random": {
+   "index": 31,
+   "status": "ok",
+   "failed": [],
+   "seconds": 12,
+   "git": false
+  },
+  "QuickCheck": {
+   "index": 32,
+   "status": "ok",
+   "failed": [],
+   "seconds": 40,
+   "git": true
+  },
+  "quickcheck-io": {
+   "index": 33,
+   "status": "ok",
+   "failed": [],
+   "seconds": 18,
+   "git": false
+  },
+  "hspec-core": {
+   "index": 34,
+   "status": "ok",
+   "failed": [],
+   "seconds": 84,
+   "git": false
+  },
+  "hspec-discover": {
+   "index": 35,
+   "status": "ok",
+   "failed": [],
+   "seconds": 28,
+   "git": false
+  },
+  "hspec": {
+   "index": 36,
+   "status": "ok",
+   "failed": [],
+   "seconds": 27,
+   "git": false
+  },
+  "simple-affine-space": {
+   "index": 37,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "split": {
+   "index": 38,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "tagged": {
+   "index": 39,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": true
+  },
+  "tagsoup": {
+   "index": 40,
+   "status": "ok",
+   "failed": [],
+   "seconds": 20,
+   "git": false
+  },
+  "optparse-applicative": {
+   "index": 41,
+   "status": "ok",
+   "failed": [],
+   "seconds": 24,
+   "git": true
+  },
+  "semigroups": {
+   "index": 42,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "xhtml": {
+   "index": 43,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "heaps": {
+   "index": 44,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "fingertree": {
+   "index": 45,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "fgl": {
+   "index": 46,
+   "status": "ok",
+   "failed": [],
+   "seconds": 24,
+   "git": true
+  },
+  "psqueues": {
+   "index": 47,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "PSQueue": {
+   "index": 48,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "edit-distance": {
+   "index": 49,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "StateVar": {
+   "index": 50,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "unliftio-core": {
+   "index": 51,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "vault": {
+   "index": 52,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "js-dgtable": {
+   "index": 53,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "js-flot": {
+   "index": 54,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "js-jquery": {
+   "index": 55,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "transformers-compat": {
+   "index": 56,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": true
+  },
+  "mmorph": {
+   "index": 57,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "base-orphans": {
+   "index": 58,
+   "status": "ok",
+   "failed": [],
+   "seconds": 14,
+   "git": false
+  },
+  "foldable1-classes-compat": {
+   "index": 59,
+   "status": "ok",
+   "failed": [],
+   "seconds": 14,
+   "git": false
+  },
+  "bifunctor-classes-compat": {
+   "index": 60,
+   "status": "ok",
+   "failed": [],
+   "seconds": 14,
+   "git": false
+  },
+  "indexed-traversable": {
+   "index": 61,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": true
+  },
+  "parallel": {
+   "index": 62,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "newtype": {
+   "index": 63,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "Diff": {
+   "index": 64,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "void": {
+   "index": 65,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "character-ps": {
+   "index": 66,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "contravariant": {
+   "index": 67,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "distributive": {
+   "index": 68,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "comonad": {
+   "index": 69,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "parser-combinators": {
+   "index": 70,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "data-default": {
+   "index": 71,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "data-default-class": {
+   "index": 72,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "terminfo": {
+   "index": 73,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "bimap": {
+   "index": 74,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": true
+  },
+  "byteable": {
+   "index": 75,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "bytestring-builder": {
+   "index": 76,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "casing": {
+   "index": 77,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "composition": {
+   "index": 78,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "cpu": {
+   "index": 79,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "data-ordlist": {
+   "index": 80,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "dlist": {
+   "index": 81,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": true
+  },
+  "time-units": {
+   "index": 82,
+   "status": "ok",
+   "failed": [],
+   "seconds": 19,
+   "git": false
+  },
+  "xml": {
+   "index": 83,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": true
+  },
+  "numbers": {
+   "index": 84,
+   "status": "ok",
+   "failed": [],
+   "seconds": 18,
+   "git": false
+  },
+  "timeit": {
+   "index": 85,
+   "status": "ok",
+   "failed": [],
+   "seconds": 15,
+   "git": false
+  },
+  "transformers-base": {
+   "index": 86,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  },
+  "tardis": {
+   "index": 87,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "binary": {
+   "index": 88,
+   "status": "ok",
+   "failed": [],
+   "seconds": 21,
+   "git": true
+  },
+  "assoc": {
+   "index": 89,
+   "status": "ok",
+   "failed": [],
+   "seconds": 16,
+   "git": false
+  },
+  "these": {
+   "index": 90,
+   "status": "ok",
+   "failed": [],
+   "seconds": 17,
+   "git": false
+  }
+ },
+ "inputs": {
+  "cabal": [
+   "compiled using version 3.17.0.0 of the Cabal library (in-tree)"
+  ],
+  "mhs": "0.16.9.0",
+  "mhs packages": [
+   "array-mhs-0.5.8.0",
+   "base-0.16.9.0",
+   "ghc-compat-0.5.11.0",
+   "mtl-2.3.2",
+   "random-mhs-1.3.2.2",
+   "splitmix-0.1.3.2",
+   "time-1.15",
+   "transformers-0.6.2.0"
+  ],
+  "MicroHs commit": "23525f5bf600cd8c80df2cf611ce3d30c84eac41",
+  "index-state": "2026-07-16T00:00:00Z",
+  "project.extra": "-- Added to the project of every step of the replay.\n--\n-- mcabal, which Makefile.packages is written for, ignores version bounds.\n-- These lift the few bounds that stand between a package of the list and the\n-- versions of its dependencies that support mhs.\n\n-- The indexed-traversable fork of MicroHs caps containers below 0.8, but\n-- containers-0.7 depends on template-haskell, and 0.8 is the first version\n-- that mhs can build. QuickCheck from git is already 2.19.0.0, which\n-- hspec-core and hspec cap below.\nallow-newer: indexed-traversable:containers, hspec-core:QuickCheck, hspec:QuickCheck\n\n-- xhtml-3000.3 and later import Data.Text.Lazy.Encoding, which the base of\n-- mhs does not have.\nconstraints: xhtml < 3000.3\n",
+  "date": "2026-10-13T01:17:21Z"
+ }
+}
