@@ -37,7 +37,7 @@ While the patches were written, the replay of the 91 packages measured each step
 | patch 5: what is specific to mhs kept in `Distribution.Simple.MHS`, and `ghc-compat` installed with mcabal (an earlier version of patch 7) | 80 |
 | patch 6, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
 | the forks of `array` and `random` installed with mcabal, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
-| patch 7: packages rewritten for mhs before solving, so that `ghc-compat` and the forks come from Hackage and mhs needs nothing installed | running |
+| patch 7: packages rewritten for mhs before solving, so that `ghc-compat` and the forks come from Hackage and mhs needs nothing installed ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38363564839), [local run](results/2026-10-13-local-base-only/summary.md)) | 91 |
 
 ## Running it locally
 
