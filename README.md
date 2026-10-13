@@ -29,6 +29,8 @@ CI also runs the tests of the PR in `cabal-testsuite/PackageTests/MHS`.
 
 The summary page of every CI run lists which packages build and run, with the inputs of the run, why each of the others fails, and what the executables that call into their package print; the logs of all the steps are attached to it.
 
+All the counts are for compiling each package as it is published, with no settings of its own: the project file of a step sets no flags and no compiler options for any package of the list. What it does set chooses versions and sources, as described above: the `index-state`, the git repositories that MicroHs's Makefile builds some packages from, the three bounds that `project.extra` lifts and its one constraint, and the copy of `hspec-core` with its missing dependency added. The tiny executable of each step, which is not one of the packages, is linked with `--no-as-needed` on Linux.
+
 While the patches were written, the replay of the 91 packages measured each step (on MicroHs's list at its master of 2026-10-10, before the bounds of `project.extra`):
 
 | cabal | Packages that build |
