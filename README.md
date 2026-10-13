@@ -44,8 +44,9 @@ While the patches were written, the replay of the 91 packages measured each step
 
 ## What running the programs shows about mhs
 
-Running the programs found two problems outside cabal. mcabal has them too, since mhs generates the same C whichever tool builds a package.
+Running the programs found three problems outside cabal. mcabal has them too, since mhs generates the same C and the same command line for the C compiler, whichever tool builds a package.
 
+* **mhs puts the libraries of packages before the C files that use them.** The package file of `terminfo` keeps `-ltinfo`, the curses library that its configure script finds, and mhs passes it to the C compiler before the C files of the program. GCC links with `--as-needed` by default on Debian and Ubuntu, which drops a library that nothing before it uses, so a program calling into `terminfo` fails to link there with `undefined reference to 'set_curterm'`. The replay links its executables with `--no-as-needed` on Linux (`CORPUS_OPTIONS` in `replay.py`), through the `mhs-options` of the project.
 * **mhs declares no imported C function.** A function imported without a header, as in `foreign import ccall "f"`, is undeclared where the C that mhs generates calls it. GCC 14 and later reject the call, and older compilers assume that it returns an `int`, which truncates a pointer. Taking the address of such a function, as in `foreign import ccall "&f"`, fails with any compiler. `terminfo` imports most of its C functions that way, so a program calling `setupTerm` compiles only if it also uses an import naming `term.h`, which declares them all; its smoke program uses `cursorAddress` for that. `cpu` imports `cpuid` that way, so the replay does not call it.
 * **`time` gets the sign of the time zone wrong under mhs.** With mhs, `HsTime.h` skips the results of the configure script, and `get_current_timezone_seconds` falls back to the C variable `timezone`, which counts seconds west of UTC, without negating it. It also names the zone after standard time. On a machine on US Eastern time in October, `getZonedTime` is eight hours ahead and calls the zone EST. CI runs in UTC, where this does not show.
 

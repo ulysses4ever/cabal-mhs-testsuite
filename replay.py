@@ -203,6 +203,14 @@ def prepare_patched(cabal, work, pkg):
     shutil.rmtree(tmp)
 
 
+# mhs gives the C compiler the libraries that the packages of a program need,
+# such as the curses library of terminfo, before the C files that use them.
+# GCC links with --as-needed by default on Debian and Ubuntu, which drops a
+# library that nothing before it uses, so on Linux the executables are linked
+# with --no-as-needed, which GNU ld does by default.
+CORPUS_OPTIONS = "-optl -Wl,--no-as-needed" if sys.platform.startswith("linux") else ""
+
+
 def project_file(git_entries, patched, extra):
     lines = [
         "packages: corpus" + "".join(" patched/" + pkg for pkg in patched),
@@ -213,6 +221,8 @@ def project_file(git_entries, patched, extra):
         extra,
         "",
     ]
+    if CORPUS_OPTIONS:
+        lines += ["package corpus", "  mhs-options: " + CORPUS_OPTIONS, ""]
     for e in git_entries:
         lines += ["source-repository-package", "  type: git", "  location: " + e["git"]]
         if e["branch"]:
