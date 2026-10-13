@@ -1,0 +1,70 @@
+diff --git a/MicroHs.cabal b/MicroHs.cabal
+index c3426e0..2d7ea0c 100644
+--- a/MicroHs.cabal
++++ b/MicroHs.cabal
+@@ -103,19 +103,19 @@ executable mhs
+                        Text.PrettyPrint.HughesPJLite
+                        Text.PrettyPrint.HughesPJLiteClass
+                        System.Console.SimpleReadline
+-                       Data.Double
+-                       Data.Integer
+                        PrimTable
+ --                       MhsEval
+                        MHSPrelude
++
++  if impl(ghc)
++    hs-source-dirs:    ghc src
++    other-modules:     Data.Double
++                       Data.Integer
+                        System.IO.MD5
+                        System.IO.Serialize
+                        System.IO.TimeMilli
+                        System.IO.Transducers
+                        System.Compress
+-
+-  if impl(ghc)
+-    hs-source-dirs:    ghc src
+     build-depends:     base         >= 4.10 && < 4.29,
+                        bytestring   >= 0.5 && < 0.20,
+                        deepseq      >= 1.1 && < 1.8,
+diff --git a/lib/base.cabal b/lib/base.cabal
+index 76d4444..807d3c6 100644
+--- a/lib/base.cabal
++++ b/lib/base.cabal
+@@ -15,7 +15,7 @@ flag gmp
+   default: False
+   manual: True
+ 
+-library base
++library
+     if flag(gmp)
+       hs-source-dirs: gmp .
+     else
+@@ -85,7 +85,6 @@ library base
+         Data.Eq
+         Data.Fixed
+         Data.Float
+-        Data.Float
+         Data.Floating
+         Data.Foldable
+         Data.Foldable1
+@@ -227,10 +226,6 @@ library base
+         Control.Concurrent.STM.Internal.TransactionLog
+         Control.Concurrent.STM.STMMonad
+         Control.Exception.Internal
+-        Control.Exception.Internal.Map
+-        Control.Exception.Internal.Set
+-        Control.Exception.Internal.TVar
+-        Control.Exception.Internal.TransactionLog
+         Control.Monad.ST_Type
+         Data.Bits.Base
+         Data.Bool_Type
+@@ -242,8 +237,6 @@ library base
+         Data.Data_Class
+         Data.Foldable.Internal
+         Data.Functor.Const_Type
+-        Data.Int.IntN
+-        Data.Int.Instances
+         Data.Integer.Internal
+         Data.Integer_Type
+         Data.List.NonEmpty_Type

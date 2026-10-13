@@ -205,7 +205,7 @@ def prepare_patched(cabal, work, pkg):
 
 # mhs gives the C compiler the libraries that the packages of a program need,
 # such as the curses library of terminfo, before the C files that use them.
-# GCC links with --as-needed by default on Debian and Ubuntu, which drops a
+# GCC links with --as-needed by default on Ubuntu, which drops a
 # library that nothing before it uses, so on Linux the executables are linked
 # with --no-as-needed, which GNU ld does by default.
 CORPUS_OPTIONS = "-optl -Wl,--no-as-needed" if sys.platform.startswith("linux") else ""

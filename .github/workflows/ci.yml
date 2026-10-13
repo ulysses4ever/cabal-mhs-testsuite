@@ -118,6 +118,23 @@ jobs:
           cabal-testsuite/PackageTests/MHS/CSources/cabal.test.hs
           cabal-testsuite/PackageTests/MHS/InstallLib/cabal.test.hs
 
+      - name: Build MicroHs with cabal
+        run: |
+          V=$(mhs --numeric-version)
+          git -C microhs apply "$PWD/microhs-cabal-fixes.patch"
+          printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\nallow-boot-library-installs: True\n' > microhs/lib/cabal.project
+          (cd microhs/lib && "$HOME/cabal-mhs" build)
+          printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\n' > microhs/cabal.project
+          (cd microhs && "$HOME/cabal-mhs" build exe:mhs)
+          # An installation of mhs whose base and compiler cabal built
+          cp -r "$HOME/.mcabal" "$HOME/mcabal-self"
+          cp "$(find microhs/lib/dist-newstyle -name "base-$V.pkg")" "$HOME/mcabal-self/mhs-$V/packages/base-$V.pkg"
+          cp "$(cd microhs && "$HOME/cabal-mhs" list-bin -v0 exe:mhs | tail -1)" "$HOME/mcabal-self/bin/mhs"
+          diff <(mhs -L"$HOME/.mcabal/mhs-$V/packages/base-$V.pkg") <("$HOME/mcabal-self/bin/mhs" -L"$HOME/mcabal-self/mhs-$V/packages/base-$V.pkg")
+          printf 'main :: IO ()\nmain = print (product [1 .. 25 :: Integer])\n' > fact.hs
+          "$HOME/mcabal-self/bin/mhs" fact.hs -ofact
+          ./fact
+
       - name: Replay MicroHs's package list
         if: ${{ !cancelled() }}
         run: python3 replay.py --cabal "$HOME/cabal-mhs" --makefile microhs/Makefile.packages --work work

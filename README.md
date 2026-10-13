@@ -43,13 +43,25 @@ While the patches were written, the replay of the 91 packages measured each step
 | patch 8: the C sources of libraries; from here on, every executable is also run, and seven of them call into their package ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38396355580), with GCC 13; [local run](results/2026-10-13-local-csources/summary.md), with GCC 15) | 91 build and run |
 | patch 9: `cabal install --lib` installs libraries for plain mhs, which CI tests with `MHS/InstallLib` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38403646037)) | 91 build and run |
 
-## What running the programs shows about mhs
+## Building MicroHs with cabal
 
-Running the programs found three problems outside cabal. mcabal has them too, since mhs generates the same C and the same command line for the C compiler, whichever tool builds a package.
+MicroHs builds its `base` with `mcabal build` in `lib`, and compiles mhs with mhs directly. cabal builds both with mhs, once [`microhs-cabal-fixes.patch`](microhs-cabal-fixes.patch) fixes four problems of their cabal files that mcabal does not mind, items 11 to 14 of the [inventory](INVENTORY.md):
 
-* **mhs puts the libraries of packages before the C files that use them.** The package file of `terminfo` keeps `-ltinfo`, the curses library that its configure script finds, and mhs passes it to the C compiler before the C files of the program. GCC links with `--as-needed` by default on Debian and Ubuntu, which drops a library that nothing before it uses, so a program calling into `terminfo` fails to link there with `undefined reference to 'set_curterm'`. The replay links its executables with `--no-as-needed` on Linux (`CORPUS_OPTIONS` in `replay.py`), through the `mhs-options` of the project.
-* **mhs declares no imported C function.** A function imported without a header, as in `foreign import ccall "f"`, is undeclared where the C that mhs generates calls it. GCC 14 and later reject the call, and older compilers assume that it returns an `int`, which truncates a pointer. Taking the address of such a function, as in `foreign import ccall "&f"`, fails with any compiler. `terminfo` imports most of its C functions that way, so a program calling `setupTerm` compiles only if it also uses an import naming `term.h`, which declares them all; its smoke program uses `cursorAddress` for that. `cpu` imports `cpuid` that way, so the replay does not call it.
-* **`time` gets the sign of the time zone wrong under mhs.** With mhs, `HsTime.h` skips the results of the configure script, and `get_current_timezone_seconds` falls back to the C variable `timezone`, which counts seconds west of UTC, without negating it. It also names the zone after standard time. On a machine on US Eastern time in October, `getZonedTime` is eight hours ahead and calls the zone EST. CI runs in UTC, where this does not show.
+```
+git -C MicroHs apply "$PWD/cabal-mhs-testsuite/microhs-cabal-fixes.patch"
+cd MicroHs/lib
+printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\nallow-boot-library-installs: True\n' > cabal.project
+cabal build                    # base-0.16.9.0.pkg
+cd ..
+printf 'packages: .\ncompiler: mhs\nwith-compiler: mhs\n' > cabal.project
+cabal build exe:mhs            # the compiler, in about a minute
+```
+
+The `base` that cabal builds has the same modules as the one that MicroHs ships, as `mhs -L` describes them. An installation of mhs whose `base` and compiler are those that cabal built passes the tests of `cabal-testsuite/PackageTests/MHS`, and the replay with it builds and runs all 91 packages ([local run](results/2026-10-13-local-self-built/summary.md)). CI builds both and compiles a program with them. `cabal install exe:mhs` does not give a working mhs, which looks for its packages and runtime only beside its binary (item 15 of the inventory).
+
+## Problems outside cabal
+
+[`INVENTORY.md`](INVENTORY.md) lists the bugs and missing features of mhs, and the problems of the MicroHs repository, of MicroCabal and of packages on Hackage, that this work found, with reproductions, and says for each whether users of mhs who do not use cabal are affected. Running the programs of the replay found several, which mcabal has too, since mhs generates the same C and the same command line for the C compiler whichever tool builds a package. The replay works around two of them: it links its executables with `--no-as-needed` on Linux (`CORPUS_OPTIONS` in `replay.py`), as mhs gives the C compiler the libraries of packages before the C files that use them (item 2), and the program for `terminfo` uses `cursorAddress`, whose import of `tparm` names `term.h`, which declares the C functions that `terminfo` imports without a header (items 3 and 21).
 
 ## Running it locally
 
