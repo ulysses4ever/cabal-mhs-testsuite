@@ -112,18 +112,32 @@ const char *greeting(void) { return "hello from C"; }
 
 ```haskell
 -- Call.hs
+module Main (main) where
+
+import Foreign.C.Types (CInt (..))
+
 foreign import ccall "triple" triple :: CInt -> CInt
 
 main :: IO ()
 main = print (triple 14)
 
 -- Addr.hs
+module Main (main) where
+
+import Foreign.C.Types (CInt)
+import Foreign.Ptr (Ptr)
+import Foreign.Storable (peek)
+
 foreign import ccall "&counter" counter :: Ptr CInt
 
 main :: IO ()
 main = peek counter >>= print
 
 -- Ptr.hs
+module Main (main) where
+
+import Foreign.C.String (CString, peekCString)
+
 foreign import ccall "greeting" greeting :: IO CString
 
 main :: IO ()
@@ -155,6 +169,10 @@ Example:
 
 ```haskell
 -- Wrapper.hs
+module Main (main) where
+
+import Foreign.Ptr (FunPtr, freeHaskellFunPtr)
+
 foreign import ccall "wrapper" mkCallback :: IO () -> IO (FunPtr (IO ()))
 
 main :: IO ()
@@ -164,6 +182,11 @@ main = do
   putStrLn "made and freed a callback"
 
 -- Dynamic.hs
+module Main (main) where
+
+import Foreign.C.Types (CInt (..))
+import Foreign.Ptr (FunPtr)
+
 foreign import ccall "stdlib.h &abs" absPtr :: FunPtr (CInt -> CInt)
 foreign import ccall "dynamic" callIntFun :: FunPtr (CInt -> CInt) -> CInt -> CInt
 
@@ -312,6 +335,8 @@ When `__MHS__` is defined, `HsTime.h` leaves out the results of the configure sc
 Example:
 
 ```haskell
+module Main (main) where
+
 import Data.Time (UTCTime (..), fromGregorian, getTimeZone, timeZoneMinutes, timeZoneName)
 
 main :: IO ()
@@ -336,6 +361,8 @@ Without cabal: every user of mhs whose program uses time zones outside UTC, with
 Example, compiled with plain `mhs`, given the directory into which `cabal install --lib terminfo` installed it:
 
 ```haskell
+module Main (main) where
+
 import System.Console.Terminfo (getCapability, setupTerm, termColumns)
 
 main :: IO ()
@@ -364,6 +391,8 @@ Without cabal: every user of terminfo with mhs; the C is the same whichever tool
 Example, compiled the same way:
 
 ```haskell
+module Main (main) where
+
 import System.Cpuid (cpuid)
 
 main :: IO ()

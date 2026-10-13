@@ -6,9 +6,9 @@ name: replay
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md', 'results/**']
+    paths-ignore: ['README.md', 'INVENTORY.md', 'results/**']
   pull_request:
-    paths-ignore: ['README.md', 'results/**']
+    paths-ignore: ['README.md', 'INVENTORY.md', 'results/**']
   workflow_dispatch:
     inputs:
       cabal-repository:
