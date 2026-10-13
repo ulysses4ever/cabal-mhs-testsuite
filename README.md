@@ -40,7 +40,7 @@ While the patches were written, the replay of the 91 packages measured each step
 | patch 6, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
 | the forks of `array` and `random` installed with mcabal, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
 | patch 7: packages rewritten for mhs before solving, so that `ghc-compat` and the forks come from Hackage and mhs needs nothing installed ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38363564839), [local run](results/2026-10-13-local-base-only/summary.md)) | 91 |
-| patch 8: the C sources of libraries; from here on, every executable is also run, and seven of them call into their package ([local run](results/2026-10-13-local-csources/summary.md), with GCC 15) | 91 build and run |
+| patch 8: the C sources of libraries; from here on, every executable is also run, and seven of them call into their package ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38396355580), with GCC 13; [local run](results/2026-10-13-local-csources/summary.md), with GCC 15) | 91 build and run |
 
 ## What running the programs shows about mhs
 
