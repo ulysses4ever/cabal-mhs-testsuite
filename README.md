@@ -37,7 +37,7 @@ While the patches were written, the replay of the 91 packages measured each step
 | patch 4: the version macros of `cabal_macros.h` | 62 |
 | patches 5 and 6: what is specific to mhs kept in `Distribution.Simple.MHS`, and `ghc-compat` | 80 |
 | patch 7, `hashable` at 1.4.7.0, and `project.extra`, on MicroHs's list at v0.16.9.0 with a pinned index ([first CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38328073444)) | 89: `hspec-core` and `hspec` fail on the undeclared `async` |
-| patch 8, the forks of `array` and `random` that mhs has installed, and the fix of `hspec-core` ([local run](results/2026-10-13-local/summary.md)) | 91 |
+| patch 8, the forks of `array` and `random` that mhs has installed, and the fix of `hspec-core` ([CI run](https://github.com/ulysses4ever/cabal-mhs-testsuite/actions/runs/38333639295), [local run](results/2026-10-13-local/summary.md)) | 91 |
 
 ## Running it locally
 

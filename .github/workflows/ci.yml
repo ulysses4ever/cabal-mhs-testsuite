@@ -6,7 +6,9 @@ name: replay
 on:
   push:
     branches: [main]
+    paths-ignore: ['README.md', 'results/**']
   pull_request:
+    paths-ignore: ['README.md', 'results/**']
   workflow_dispatch:
     inputs:
       cabal-repository:
