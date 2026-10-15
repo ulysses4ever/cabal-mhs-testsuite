@@ -10,7 +10,7 @@ Every bug comes with an example, what was expected, and what happens, and every 
 
 **1. An installed mhs never searches the package directory of the user.**
 
-`mhs.conf` sets `packageDbPath = "$MHSPKG:$HOME/.mcabal-user/mhs-$VERSION"`, but an mhs that runs from an installation expands `$VERSION` to its own directory instead of its version. The first clause of `expandEnvLookup` in `MicroHs.Main`, `expandEnvLookup (Just s) mpkg = fromMaybe s <$> lookupEnv mpkg`, catches every variable, so the clause for `VERSION` is never reached.
+`mhs.conf` sets `packageDbPath = "$MHSPKG:$HOME/.mcabal-user/mhs-$VERSION"`: the package directory of the installation, where `base` is, then the package directory of the user. An mhs that runs from an installation expands `$MHSPKG` and `$HOME` right, but `$VERSION` to the directory of its installation instead of its version, so the second directory is a path that cannot exist.
 
 Example, with mhs installed by `make minstall` into `~/.mcabal`, and the package and the program in separate directories:
 
@@ -46,9 +46,28 @@ search path=["."]
 package path=["~/.mcabal/bin/../mhs-0.16.9.0","~/.mcabal-user/mhs-~/.mcabal/bin/../mhs-0.16.9.0"]
 ```
 
-With `VERSION=0.16.9.0` set in the environment, the same command works, which shows that only the expansion is wrong.
+The first entry of the package path is right: `$MHSPKG` is the package directory of the installation, `~/.mcabal/mhs-0.16.9.0`, which holds `packages/base-0.16.9.0.pkg`. The second should be `~/.mcabal-user/mhs-0.16.9.0`, but it is `~/.mcabal-user/mhs-` followed by that same installation directory. With `VERSION=0.16.9.0` set in the environment, the second entry is right and the example works; with `HOME` unset, `$HOME` becomes the installation directory too.
 
-Fix: let the first clause match only `MHSPKG`, or try `VERSION` first.
+Why: `expandEnvLookup` in `MicroHs.Main` expands the variables of `packageDbPath`, and is given the installation directory when mhs runs from an installation:
+
+```haskell
+expandEnvLookup :: Maybe FilePath -> String -> IO String
+expandEnvLookup (Just s) mpkg = fromMaybe s <$> lookupEnv mpkg
+expandEnvLookup _ "VERSION" = return mhsVersion
+expandEnvLookup _ name = fromMaybe "" <$> lookupEnv name
+```
+
+The first clause is meant for `MHSPKG`, but `mpkg` is a variable, not the string `"MHSPKG"`, so it matches every name: an installed mhs takes every variable from the environment, and falls back to its installation directory for those that are not set. `HOME` is set, `VERSION` is not, and the clause that gives the version is reached only by an mhs that runs from its source tree or with `MHSDIR` set, which have no installation directory.
+
+Fix: match the names.
+
+```haskell
+expandEnvLookup _ "VERSION" = return mhsVersion
+expandEnvLookup (Just s) "MHSPKG" = fromMaybe s <$> lookupEnv "MHSPKG"
+expandEnvLookup _ name = fromMaybe "" <$> lookupEnv name
+```
+
+An installed mhs built with this change has the package path `["~/.mcabal/bin/../mhs-0.16.9.0","~/.mcabal-user/mhs-0.16.9.0"]`.
 
 Without cabal: anyone who installs packages into the user directory that `mhs.conf` names, with `mhs -Q` or another tool, has to add it with `-a`. mcabal is not affected, as it installs elsewhere (item 18). With cabal, `cabal install --lib` installs there, and tells users to pass `-a` until this is fixed.
 
