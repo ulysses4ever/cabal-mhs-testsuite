@@ -69,7 +69,7 @@ expandEnvLookup _ name = fromMaybe "" <$> lookupEnv name
 
 An installed mhs built with this change has the package path `["~/.mcabal/bin/../mhs-0.16.9.0","~/.mcabal-user/mhs-0.16.9.0"]`.
 
-Without cabal: anyone who installs packages into the user directory that `mhs.conf` names, with `mhs -Q` or another tool, has to add it with `-a`. mcabal is not affected, as it installs elsewhere (item 18). With cabal, `cabal install --lib` installs there, and tells users to pass `-a` until this is fixed.
+Without cabal: anyone who installs packages into the user directory that `mhs.conf` names, with `mhs -Q` or another tool, has to add it with `-a`. mcabal is not affected, as it installs elsewhere (item 18), and neither is `cabal install --lib`, which installs where mcabal does.
 
 **2. mhs gives the C compiler the libraries of packages before the C files that use them.**
 
@@ -327,7 +327,7 @@ These are inconsistencies rather than bugs: they make no visible difference with
 
 **17. hashable is presented at 1.0.0.0.** MicroCabal calls it "very rudimentary", but the `Data.Hashable` of mhs has the API of the 1.4 series, which unordered-containers and these require. mcabal ignores bounds, and no package of the list tests `MIN_VERSION_hashable`, so it makes no difference there. cabal presents it at 1.4.7.0.
 
-**18. mcabal installs into `~/.mcabal/mhs-<version>`**, or `$CABALDIR`, which is the package directory of mhs itself after `make minstall`, rather than into the user directory that `mhs.conf` names, `~/.mcabal-user/mhs-<version>`, where cabal installs. When mhs is installed elsewhere, plain `mhs` does not search what mcabal installs.
+**18. mcabal installs into `~/.mcabal/mhs-<version>`**, or `$CABALDIR`, which is the package directory of mhs itself after `make minstall`, rather than into the user directory that `mhs.conf` names, `~/.mcabal-user/mhs-<version>`. `cabal install --lib` installs where mcabal does, so that mhs finds what both install in spite of item 1. When mhs is installed elsewhere, plain `mhs` searches neither directory.
 
 ## Packages on Hackage
 
