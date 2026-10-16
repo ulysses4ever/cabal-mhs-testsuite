@@ -1,6 +1,6 @@
 ## Replay of MicroHs's package list
 
-This run used cabal built at commit 3 of the 6 of [ulysses4ever/cabal#41](https://github.com/ulysses4ever/cabal/pull/41), *Pass the version macros of cabal_macros.h to mhs*, at 7c5fe93d9 on `master` 538d465eb. Rebased onto 27789667b, which changes only CI workflows, the commit is 7e9106653, with the same sources.
+This run used cabal built at commit 3 of the 6 of [ulysses4ever/cabal#41](https://github.com/ulysses4ever/cabal/pull/41), *Pass the version macros of cabal_macros.h to mhs*, at 7c5fe93d9 on `master` 538d465eb. Rebased onto 27789667b, which changes only CI workflows, and with the help texts under `doc/` regenerated in the first commit, the commit is c64d7778a; cabal is built from the same sources.
 
 **58 of 91 packages build and run.**
 
