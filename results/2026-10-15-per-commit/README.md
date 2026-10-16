@@ -9,4 +9,4 @@ MicroHs's package list, replayed with cabal built at each commit of [ulysses4eve
 | 3 | [`7c5fe93`](https://github.com/ulysses4ever/cabal/pull/41/commits/7c5fe93d9ae5cf76b24e0b7c6f90090b81c0ec47) Pass the version macros of cabal_macros.h to mhs | [58/91](3-7c5fe93/summary.md) |
 | 4 | [`b5b7dc3`](https://github.com/ulysses4ever/cabal/pull/41/commits/b5b7dc3e4f91f2817e4485efaa97e441097d7c29) Rewrite packages for mhs as MicroCabal does, before solving | [88/91](4-b5b7dc3/summary.md) |
 | 5 | [`c923196`](https://github.com/ulysses4ever/cabal/pull/41/commits/c9231961bd78c946ca9164494b29c6ca3006cd0d) Compile the C sources of libraries with mhs | [91/91](5-c923196/summary.md) |
-| 6 | [`f08ff95`](https://github.com/ulysses4ever/cabal/pull/41/commits/f08ff9582b60ce53d547196c61463785da233b11) Install libraries for mhs with cabal install --lib | [91/91](6-f08ff95/summary.md) |
+| 6 | [`351abd9`](https://github.com/ulysses4ever/cabal/pull/41/commits/351abd99ef92248a6b6479fd209510a692fc564b) Install libraries for mhs with cabal install --lib | [91/91](6-351abd9/summary.md) |

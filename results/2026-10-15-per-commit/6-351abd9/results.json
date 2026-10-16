@@ -5,7 +5,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 16,
+   "seconds": 17,
    "git": false
   },
   "colour": {
@@ -29,7 +29,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 12,
+   "seconds": 13,
    "git": false
   },
   "array": {
@@ -61,7 +61,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 13,
+   "seconds": 12,
    "git": true
   },
   "containers": {
@@ -69,15 +69,15 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 41,
+   "seconds": 43,
    "git": false
   },
   "time": {
    "index": 9,
    "status": "ok",
    "failed": [],
-   "output": "time zone EST, now 2026-10-15 23:45:21.895084 EST",
-   "seconds": 23,
+   "output": "time zone EST, now 2026-10-16 20:21:09.483617 EST",
+   "seconds": 24,
    "git": false
   },
   "polyparse": {
@@ -125,7 +125,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 18,
+   "seconds": 19,
    "git": false
   },
   "filepath": {
@@ -133,7 +133,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 18,
+   "seconds": 19,
    "git": false
   },
   "granite": {
@@ -141,7 +141,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 26,
+   "seconds": 27,
    "git": false
   },
   "haskell-lexer": {
@@ -189,7 +189,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 17,
+   "seconds": 18,
    "git": false
   },
   "pretty": {
@@ -221,7 +221,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 13,
+   "seconds": 12,
    "git": true
   },
   "prettyprinter-compat-ansi-wl-pprint": {
@@ -244,7 +244,7 @@
    "index": 30,
    "status": "ok",
    "failed": [],
-   "output": "splitmix 811040449577870233",
+   "output": "splitmix 15455821398799070778",
    "seconds": 25,
    "git": false
   },
@@ -252,7 +252,7 @@
    "index": 31,
    "status": "ok",
    "failed": [],
-   "output": "random 6",
+   "output": "random 2",
    "seconds": 20,
    "git": false
   },
@@ -269,7 +269,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 15,
+   "seconds": 16,
    "git": false
   },
   "hspec-core": {
@@ -277,7 +277,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 81,
+   "seconds": 83,
    "git": false
   },
   "hspec-discover": {
@@ -293,7 +293,7 @@
    "status": "ok",
    "failed": [],
    "output": "1 example, 0 failures",
-   "seconds": 31,
+   "seconds": 29,
    "git": false
   },
   "simple-affine-space": {
@@ -333,7 +333,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 22,
+   "seconds": 21,
    "git": true
   },
   "semigroups": {
@@ -357,7 +357,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 12,
+   "seconds": 13,
    "git": false
   },
   "fingertree": {
@@ -429,7 +429,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 11,
+   "seconds": 12,
    "git": false
   },
   "js-flot": {
@@ -445,7 +445,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 11,
+   "seconds": 12,
    "git": false
   },
   "transformers-compat": {
@@ -461,7 +461,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 13,
+   "seconds": 14,
    "git": false
   },
   "base-orphans": {
@@ -493,7 +493,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 18,
+   "seconds": 16,
    "git": true
   },
   "parallel": {
@@ -525,7 +525,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 12,
+   "seconds": 11,
    "git": false
   },
   "character-ps": {
@@ -533,7 +533,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 14,
+   "seconds": 13,
    "git": false
   },
   "contravariant": {
@@ -541,7 +541,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 14,
+   "seconds": 13,
    "git": false
   },
   "distributive": {
@@ -565,7 +565,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 12,
+   "seconds": 13,
    "git": false
   },
   "data-default": {
@@ -597,7 +597,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 16,
+   "seconds": 17,
    "git": true
   },
   "byteable": {
@@ -693,7 +693,7 @@
    "status": "ok",
    "failed": [],
    "output": "",
-   "seconds": 13,
+   "seconds": 14,
    "git": false
   },
   "tardis": {
@@ -743,6 +743,6 @@
   "MicroHs commit": "23525f5bf600cd8c80df2cf611ce3d30c84eac41",
   "index-state": "2026-07-16T00:00:00Z",
   "project.extra": "-- Added to the project of every step of the replay.\n--\n-- mcabal, which Makefile.packages is written for, ignores version bounds.\n-- These lift the few bounds that stand between a package of the list and the\n-- versions of its dependencies that support mhs.\n\n-- The indexed-traversable fork of MicroHs caps containers below 0.8, but\n-- containers-0.7 depends on template-haskell, and 0.8 is the first version\n-- that mhs can build. QuickCheck from git is already 2.19.0.0, which\n-- hspec-core and hspec cap below.\nallow-newer: indexed-traversable:containers, hspec-core:QuickCheck, hspec:QuickCheck\n\n-- xhtml-3000.3 and later import Data.Text.Lazy.Encoding, which the base of\n-- mhs does not have.\nconstraints: xhtml < 3000.3\n",
-  "date": "2026-10-15T19:42:23Z"
+  "date": "2026-10-16T16:18:08Z"
  }
 }
