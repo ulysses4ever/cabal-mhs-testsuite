@@ -2,7 +2,7 @@
 
 What the work on [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), cabal building packages with MicroHs, found outside cabal: in mhs, in the MicroHs repository, in MicroCabal, and in packages on Hackage. It comes from replaying MicroHs's package list with cabal ([`replay.py`](replay.py)), from running small programs with each package, and from building MicroHs itself with cabal.
 
-Every bug comes with an example, what was expected, and what happens, and every item says whether users of mhs who do not use cabal, with plain `mhs` or with `mcabal`, are affected. The examples ran with MicroHs v0.16.9.0 and GCC 15 on Linux; outputs are cut to the lines that matter, and home directories are shortened to `~`. Item 1 is still on MicroHs master as of 2026-10-13; the others were not checked against master. None of it has been reported upstream yet.
+Every bug comes with an example, what was expected, and what happens, and every item says whether users of mhs who do not use cabal, with plain `mhs` or with `mcabal`, are affected. The examples ran with MicroHs v0.16.9.0 and GCC 15 on Linux; outputs are cut to the lines that matter, and home directories are shortened to `~`. On 2026-10-16 every item was checked again against MicroHs master, e11ae21 of 2026-10-15 (version 0.16.10.0), and MicroCabal main, 50d4625, and the items about packages against their latest versions on Hackage: all still hold, but item 20, which time 1.16.0.1 fixed, and item 23, half of which hspec-core 2.11.18 resolved. On master, mhs prints its errors as `File:line:col: error: X` with an excerpt of the source, rather than `mhs: uncaught exception: error: X` as in the outputs below. None of it has been reported upstream yet.
 
 ## mhs
 
@@ -313,6 +313,8 @@ package path=["~/.local/bin/../mhs-0.16.9.0"]
 
 With `MHSDIR` set to the data directory that cabal installed, `share` of the package in the store, the same mhs compiles and runs `Hello.hs`.
 
+From a clean checkout, `cabal install exe:mhs` fails earlier, with `Error: [Cabal-6661] filepath wildcard './mhs.conf' does not match any files.`: `data-files` names `mhs.conf`, which only `make` generates and git does not track. After `make mhs.conf`, it fails as above. On master, which installs its data directory as `packages/MicroHs-<version>/data`, the warning names that directory.
+
 Fix: look in the data directory of `Paths_MicroHs` as a last resort, or say in the README that `MHSDIR` has to be set. The same holds for an mhs that cabal builds with mhs.
 
 Without cabal: no effect; `make minstall` lays the installation out as mhs expects.
@@ -371,7 +373,7 @@ main = do
 | `Asia/Tokyo` | `JST 540` | `JST -540` |
 | `UTC` | `UTC 0` | `UTC 0` |
 
-Fix: negate it, as the branch for Windows does, and name the zone from `tzname[1]` when `tm_isdst` is set.
+Fix: negate it, as the branch for Windows does, and name the zone from `tzname[1]` when `tm_isdst` is set. time 1.16.0.1, of 2026-07-20, does both ("fix Unix timezone fallback offset sign and DST abbreviation"), and with it the example prints `EDT -240` and `JST 540`. MicroCabal still pins time 1.15, and the `index-state` of the replay, 2026-07-16, predates the fix.
 
 Without cabal: every user of mhs whose program uses time zones outside UTC, with mcabal too.
 
@@ -430,4 +432,4 @@ Without cabal: every user of cpu with mhs and GCC 14 or later.
 
 ### Other
 
-**23. Bounds.** The replay lifts a few, see [`project.extra`](project.extra): the indexed-traversable fork of MicroHs caps containers below 0.8, the first version that mhs can build, and hspec and hspec-core cap QuickCheck below 2.19, the version that the Makefile of MicroHs takes from git. Without cabal: mcabal ignores bounds.
+**23. Bounds.** The replay lifts a few, see [`project.extra`](project.extra): the indexed-traversable fork of MicroHs caps containers below 0.8, the first version that mhs can build, and hspec-core 2.11.17, which hspec 2.11.17 requires exactly, capped QuickCheck below 2.19, the version that the Makefile of MicroHs takes from git. hspec-core 2.11.18 allows QuickCheck below 2.20, so only the bound of the fork is left to lift once the replay's `index-state` is past it. Without cabal: mcabal ignores bounds.
