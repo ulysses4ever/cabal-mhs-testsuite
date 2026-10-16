@@ -1,6 +1,6 @@
 ## Replay of MicroHs's package list
 
-This run used cabal built at commit 1 of the 6 of [ulysses4ever/cabal#41](https://github.com/ulysses4ever/cabal/pull/41), 3e9a787cd, *Build, install and register packages with MicroHs*, on `master` 538d465eb.
+This run used cabal built at commit 1 of the 6 of [ulysses4ever/cabal#41](https://github.com/ulysses4ever/cabal/pull/41), *Build, install and register packages with MicroHs*, at 3e9a787cd on `master` 538d465eb. Rebased onto 27789667b, which changes only CI workflows, the commit is 89087500a, with the same sources.
 
 **3 of 91 packages build and run.**
 
