@@ -227,7 +227,7 @@ Without cabal: every user of mhs whose program reaches such an import; with term
 
 ### Feature requests
 
-**5. Install the C files of a package with `mhs -Q`.** When it links a program, mhs compiles the `cbits/*.c` beside each package file and includes its `include` directory, but `mhs -Q` copies only the package file. Every tool that installs packages copies them itself, as MicroCabal and cabal do. Without cabal: users of `mhs -Q` whose packages have C sources.
+**5. Install the C files of a package with `mhs -Q`.** When it links a program, mhs compiles the `cbits/*.c` beside each package file and includes its `include` directory, but `mhs -Q` copies only the package file. Every tool that installs packages copies them itself, as MicroCabal and cabal do. Without cabal: users of `mhs -Q` whose packages have C sources are affected: they have to copy the C files beside the package file themselves, as the tools that install packages do.
 
 **6. Keep the C compiler options of a package.** `mhs -P` keeps `-optl` options but not `-optc` ones, so the `cc-options` of a library cannot apply to its C sources, which are compiled with the options of each program that uses it. MicroCabal passes the C sources of a library to `mhs -P` with `-optc`, where they are ignored. Without cabal: the same for mcabal.
 
