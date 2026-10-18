@@ -1,6 +1,6 @@
 ## Replay of MicroHs's package list
 
-This run used cabal built at commit 2 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), 2b2f1e729, *Present the base of mhs at its Hackage versions*, on `master` aeac769eb.
+This run used cabal built at commit 2 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), *Present the base of mhs at its Hackage versions*, at 2b2f1e729 on `master` aeac769eb; rebased onto 9cd921b60, which changes only documentation, the commit is 48885db9d, with the same sources.
 
 **39 of 91 packages build and run.**
 

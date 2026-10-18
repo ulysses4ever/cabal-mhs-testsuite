@@ -1,6 +1,6 @@
 ## Replay of MicroHs's package list
 
-This run used cabal built at commit 6 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), 44f201e4a, *Install libraries for mhs with cabal install --lib*, on `master` aeac769eb.
+This run used cabal built at commit 6 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), *Install libraries for mhs with cabal install --lib*, at 44f201e4a on `master` aeac769eb; rebased onto 9cd921b60, which changes only documentation, the commit is 7ea4b1949, with the same sources.
 
 **91 of 91 packages build and run.**
 
