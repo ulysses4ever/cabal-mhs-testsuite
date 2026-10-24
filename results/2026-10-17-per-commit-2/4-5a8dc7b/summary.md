@@ -1,6 +1,6 @@
 ## Replay of MicroHs's package list
 
-This run used cabal built at commit 4 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), *Rewrite packages for mhs as MicroCabal does, before solving*, at d918f3181 on `master` aeac769eb; rebased onto 9cd921b60, which changes only documentation, the commit is 6eeb10cb6, with the same sources.
+This run used cabal built at commit 4 of the 6 of [haskell/cabal#11392](https://github.com/haskell/cabal/pull/11392), *Rewrite packages for mhs as MicroCabal does, before solving*, at d918f3181 on `master` aeac769eb; rebased onto 9cd921b60, which changes only documentation, and given a CI step that installs MicroHs, the commit is 5a8dc7b03, with the same Haskell sources.
 
 **88 of 91 packages build and run.**
 
