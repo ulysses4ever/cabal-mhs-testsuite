@@ -1,0 +1,41 @@
+--- a/Cabal/src/Distribution/Simple/MHS.hs
++++ b/Cabal/src/Distribution/Simple/MHS.hs
+@@ -74,6 +74,7 @@
+ import Data.List (stripPrefix)
+ import qualified Data.Map as Map (fromList)
+ import qualified Data.Text as Text
++import System.IO.Unsafe (unsafePerformIO)
+ import System.Directory (canonicalizePath, doesDirectoryExist, getDirectoryContents, getHomeDirectory, makeAbsolute, removeDirectoryRecursive)
+ import System.FilePath (addTrailingPathSeparator, dropExtension, equalFilePath, normalise, takeDirectory, takeExtension, takeFileName)
+ 
+@@ -238,7 +239,7 @@
+ rewritePackageDescription
+   :: (PackageName -> Bool) -> GenericPackageDescription -> GenericPackageDescription
+ rewritePackageDescription available gpd0
+-  | packageName gpd0 `elem` withoutGhcCompat || not (available ghcCompat) = gpd
++  | "noghccompat" `elem` ablation || packageName gpd0 `elem` withoutGhcCompat || not (available ghcCompat) = gpd
+   | otherwise =
+       gpd
+         { condLibrary = fmap addGhcCompat (condLibrary gpd)
+@@ -283,8 +284,12 @@
+ 
+ -- | The forks of packages from Hackage that mhs can compile, as MicroCabal
+ -- uses them.
++ablation :: [String]
++ablation = unsafePerformIO (maybe [] words <$> lookupEnv "MHS_ABLATE")
++{-# NOINLINE ablation #-}
++
+ forkedPackages :: [(PackageName, PackageName)]
+-forkedPackages =
++forkedPackages = if "noforks" `elem` ablation then [] else
+   [ (mkPackageName "array", mkPackageName "array-mhs")
+   , (mkPackageName "random", mkPackageName "random-mhs")
+   ]
+@@ -492,6 +497,7 @@
+ -- as 'compatPackages', any other package as itself.
+ withCompat :: InstalledPackageInfo -> [InstalledPackageInfo]
+ withCompat ipi
++  | "nocompat" `elem` ablation = [ipi]
+   | pkgName (IPI.sourcePackageId ipi) == mkPackageName "base" && IPI.sourceLibName ipi == LMainLibName = compatPackages ipi
+   | otherwise = [ipi]
+ 
