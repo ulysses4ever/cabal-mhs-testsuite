@@ -21,7 +21,7 @@ The packages come from Hackage as it was at the `index-state` set in `replay.py`
 
 ## The cabal under test
 
-[`patches/`](patches) holds the commits that make the PR work, on top of its head, [`1f2da2d`](https://github.com/haskell/cabal/commit/1f2da2dce875050e1ea9bc0b37972732094125d9), until they are pushed to the PR. CI checks out haskell/cabal at that commit and applies them. A run started by hand can build another repository and commit of cabal, with or without the patches, and another tag of MicroHs.
+CI checks out haskell/cabal at the head of the PR, whose commits are live there, and MicroHs at a commit of its master after [augustss/MicroHs#577](https://github.com/augustss/MicroHs/pull/577), which writes the registrations of base that the PR reads, until mhs 0.17.1.0 is released. A run started by hand can build another repository and commit of cabal, and another tag or commit of MicroHs. [`patches/`](patches) holds the commits of the PR as they were before they went live, on top of [`1f2da2d`](https://github.com/haskell/cabal/commit/1f2da2dce875050e1ea9bc0b37972732094125d9); a run started by hand can still apply them to that commit.
 
 CI also runs the tests of the PR in `cabal-testsuite/PackageTests/MHS`.
 

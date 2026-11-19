@@ -16,22 +16,24 @@ on:
         default: haskell/cabal
       cabal-ref:
         description: The commit or branch of cabal to build
-        default: 1f2da2dce875050e1ea9bc0b37972732094125d9
+        default: 515c6994d9b95aeb20c806bde2c536d3d7772a62
       apply-patches:
-        description: Apply the patches of this repository to cabal
+        description: Apply the patches of this repository to cabal (they predate the commit of the PR built by default)
         type: boolean
-        default: true
+        default: false
       microhs-ref:
         description: The tag or commit of MicroHs
-        default: v0.16.9.0
+        default: 29c206d99bf4e75dcd783c7233e1309ed8bdc50d
 
 env:
   CABAL_REPOSITORY: ${{ inputs.cabal-repository || 'haskell/cabal' }}
-  # The head of https://github.com/haskell/cabal/pull/11392 when the patches
-  # were made.
-  CABAL_REF: ${{ inputs.cabal-ref || '1f2da2dce875050e1ea9bc0b37972732094125d9' }}
-  APPLY_PATCHES: ${{ github.event_name != 'workflow_dispatch' || inputs.apply-patches }}
-  MICROHS_REF: ${{ inputs.microhs-ref || 'v0.16.9.0' }}
+  # The head of https://github.com/haskell/cabal/pull/11392: its commits are
+  # live there, and the patches of this repository predate them.
+  CABAL_REF: ${{ inputs.cabal-ref || '515c6994d9b95aeb20c806bde2c536d3d7772a62' }}
+  APPLY_PATCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.apply-patches }}
+  # A commit after augustss/MicroHs#577, whose registrations of base the PR
+  # needs, until 0.17.1.0 is released.
+  MICROHS_REF: ${{ inputs.microhs-ref || '29c206d99bf4e75dcd783c7233e1309ed8bdc50d' }}
 
 jobs:
   replay:
